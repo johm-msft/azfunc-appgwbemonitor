@@ -17,30 +17,41 @@ namespace AppGWBEHealthVMSS.shared
 {
     class VmScaleSetOperations
     {
-        public static void RemoveVMSSInstanceByID(IAzure azureClient,string rgName, string scaleSetName,string serverIP,ILogger log)
+        public static void RemoveVMSSInstanceByID(IAzure azureClient,string rgName, string scaleSetName,List<string> serverIPs,ILogger log)
         {
             try
             {
                 var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
                 log.LogInformation("Enumerating VM Instances in ScaleSet");
                 var vms = scaleSet.VirtualMachines.List();
-               
-                foreach (var vm in vms)
+                var virtualmachines = vms.Where(x => x.Inner.ProvisioningState == "Succeeded");
+                               
+                var vmssNodeCount = vms.Count();
+                List<string> badInstances = new List<string>();
+                
+              
+                foreach (var vm in virtualmachines)
                 {
-                    log.LogInformation("Processing VM Instance: {0}", vm.Name);
-                    var allnics = vm.ListNetworkInterfaces().ToList();
-                    string nicIP = allnics[0].Inner.IpConfigurations[0].PrivateIPAddress;
-                    log.LogInformation("NIC Private IP: {0}", nicIP);
-                    log.LogInformation("Checking if NIC IP Matches Unhealthy Backend Address");
-                    if (serverIP == nicIP)
-                    {
-                        log.LogInformation("Unhealthy Match Found VM: {0} with Instance ID: {1}", nicIP, vm.InstanceId);
-                        var vmInstanceId = vm.InstanceId;
-                        log.LogInformation("Removing VM: {0} with Instance ID: {1}", nicIP, vmInstanceId);
-                        scaleSet.VirtualMachines.DeleteInstances(vmInstanceId);
+                   if(serverIPs.Contains(vm.ListNetworkInterfaces().First().Inner.IpConfigurations.First().PrivateIPAddress))
+                   {
+                         log.LogInformation("Bad Instance detected: {0}", vm.InstanceId);
+                         badInstances.Add(vm.InstanceId);
+                   }
                         
-                    }
+                     
+                       
 
+                }
+
+                if (badInstances.Count() != 0)
+                {
+                    string[] badInstancesArray = badInstances.ToArray();
+                    log.LogInformation("Removing Bad Instances");
+                    scaleSet.VirtualMachines.DeleteInstances(badInstancesArray);
+                }
+                else
+                {
+                    log.LogInformation("No Nodes Detected to Remove");
                 }
             }
             catch (Exception e)
@@ -48,6 +59,26 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation("Error Message: " + e.Message);
             }
         }
+        public static void ScaleEvent(IAzure azureClient, string rgName, string scaleSetName, int scaleNodeCount, ILogger log)
+        {
+            try
+            {
+                
+                var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
+                int scaler = scaleSet.VirtualMachines.List().Count() + scaleNodeCount;
+                log.LogInformation("Scale Event in ScaleSet {0}", scaleSetName);
+                scaleSet.Inner.Sku.Capacity = scaler;
+                scaleSet.Update().Apply();
+
+
+
+            }
+            catch (Exception e)
+            {
+                log.LogInformation("Error Message: " + e.Message);
+            }
+        }
+       
       
      
     }

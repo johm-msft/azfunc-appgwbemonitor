@@ -1,25 +1,16 @@
 using System;
-using System.IO;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
+using System.Linq;
 using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
+using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Microsoft.Azure.Management.ResourceManager.Fluent;
-using Microsoft.Azure.Management.Network.Fluent;
-using Microsoft.Azure.Management.Fluent;
-using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
 using AppGWBEHealthVMSS.shared;
-
-
+using Microsoft.Azure.Management.ResourceManager.Fluent;
 
 namespace AppGWBEHealthVMSS
 {
-    public static class AppGWBEHealth
+    public static class CheckConcurrentCons
     {
-        [FunctionName("AppGWBEHealthProbe")]
+        [FunctionName("checkConcurrentCons")]
         public static void Run([TimerTrigger("0 * * * * *")]TimerInfo myTimer, ILogger log)
         {
             string clientID = System.Environment.GetEnvironmentVariable("clientID");
@@ -30,26 +21,32 @@ namespace AppGWBEHealthVMSS
             string resourcegroupname = System.Environment.GetEnvironmentVariable("resourceGroupName");
             string appGwName = System.Environment.GetEnvironmentVariable("appGwName");
             string scaleSetName = System.Environment.GetEnvironmentVariable("scaleSetName");
-
+           
             try
             {
-                log.LogInformation("Creating Azure Client for BE Health Function");
+                log.LogInformation("Creating Azure Client for checkConcurrentCons Function");
                 var azEnvironment = AzureEnvironment.AzureGlobalCloud;
                 var azClient = AzureClient.CreateAzureClient(clientID, clientSecret, tenantID, azEnvironment, subscriptionID);
-                log.LogInformation("Checking Application Gateway BE ");
-                ApplicationGatewayOperations.CheckApplicationGatewayBEHealth(azClient, resourcegroupname, appGwName, scaleSetName, log);
+                log.LogInformation("Getting Current Connection Count");
+                var currentConnectionCount = ApplicationGatewayOperations.GetConcurrentConnectionCountAppGW(azClient, resourcegroupname, appGwName, log);
+                log.LogInformation("Calculating Average Connections Per Node");
+                var avgConnectionsPerNode = ApplicationGatewayOperations.AvgConnectionsPerNode(azClient, resourcegroupname, appGwName, currentConnectionCount, log);
+                if(avgConnectionsPerNode >= 3)
+                {
+                    int scaleNodeCount = 10;
+                    log.LogInformation("Scale Event Initiated");
+                    VmScaleSetOperations.ScaleEvent(azClient, resourcegroupname, scaleSetName, scaleNodeCount, log);
+
+                }
+                
+
+
             }
             catch (Exception e)
             {
                 log.LogInformation("Error Message: " + e.Message);
             }
-
-
-
-
-
-
-
+            
         }
     }
 }
