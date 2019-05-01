@@ -5,6 +5,7 @@ using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Extensions.Logging;
 using AppGWBEHealthVMSS.shared;
 using Microsoft.Azure.Management.ResourceManager.Fluent;
+using Microsoft.Azure.Management.Network.Fluent;
 
 namespace AppGWBEHealthVMSS
 {
@@ -27,38 +28,49 @@ namespace AppGWBEHealthVMSS
                 log.LogInformation("Creating Azure Client for checkConcurrentCons Function");
                 var azEnvironment = AzureEnvironment.AzureGlobalCloud;
                 var azClient = AzureClient.CreateAzureClient(clientID, clientSecret, tenantID, azEnvironment, subscriptionID);
+                var scaleSet = azClient.VirtualMachineScaleSets.GetByResourceGroup(resourcegroupname, scaleSetName);
+                var appGw = azClient.ApplicationGateways.GetByResourceGroup(resourcegroupname, appGwName);
+                var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
+
                 log.LogInformation("Getting Current Connection Count");
-                var currentConnectionCount = ApplicationGatewayOperations.GetConcurrentConnectionCountAppGW(azClient, resourcegroupname, appGwName, log);
-                log.LogInformation("Calculating Average Connections Per Node");
-                var avgConnectionsPerNode = ApplicationGatewayOperations.AvgConnectionsPerNode(azClient, resourcegroupname, appGwName, currentConnectionCount, log);
-                log.LogInformation("Calculating Ideal Node Count");
-                var idealNumberofNodes = ApplicationGatewayOperations.IdealNumberofNodes(azClient, resourcegroupname, appGwName, currentConnectionCount, log);
+                var currentConnectionCount = ApplicationGatewayOperations.GetConcurrentConnectionCountAppGW(appGw, azClient,log);
 
-                if(avgConnectionsPerNode >= 3)
+                if (currentConnectionCount > 0)
                 {
-                   if(idealNumberofNodes <= 10)
-                   {
-                       int scaleNodeCount = idealNumberofNodes;
-                       log.LogInformation("Scale Event Initiated");
-                       VmScaleSetOperations.ScaleEvent(azClient, resourcegroupname, scaleSetName, scaleNodeCount, log);
+                    log.LogInformation("Calculating Average Connections Per Node");
+                    var avgConnectionsPerNode = ApplicationGatewayOperations.AvgConnectionsPerNode(appGwBEHealth, currentConnectionCount, log);
+                    log.LogInformation("Calculating Ideal Node Count");
+                    var idealNumberofNodes = ApplicationGatewayOperations.IdealNumberofNodes(appGwBEHealth, currentConnectionCount, log);
 
-                   } 
-                   else 
-                   {
-                        int scaleNodeCount = 10;
-                        log.LogInformation("Scale Event Initiated");
-                        VmScaleSetOperations.ScaleEvent(azClient, resourcegroupname, scaleSetName, scaleNodeCount, log);
-                   }
-                   
+                    if (avgConnectionsPerNode > 3)
+                    {
+                        if (idealNumberofNodes <= 10)
+                        {
+                            int scaleNodeCount = idealNumberofNodes;
+                            log.LogInformation("Scale Event Initiated");
+                            VmScaleSetOperations.ScaleEvent(scaleSet, scaleNodeCount, log);
+
+                        }
+                        else
+                        {
+                            int scaleNodeCount = 10;
+                            log.LogInformation("Scale Event Initiated");
+                            VmScaleSetOperations.ScaleEvent(scaleSet, scaleNodeCount, log);
+                        }
+
+
+                    }
+                    if (avgConnectionsPerNode < 2)
+                    {
+                        log.LogInformation("Scale Down ");
+                        VmScaleSetOperations.CoolDownEvent(scaleSet, log);
+                    }
 
                 }
-                if(avgConnectionsPerNode < 3)
+                else
                 {
-                    log.LogInformation("Scale Down ");
-                    VmScaleSetOperations.CoolDownEvent(azClient, resourcegroupname, scaleSetName, log);
+                    log.LogInformation("Concurrent Count is 0 no action require");
                 }
-                
-
 
             }
             catch (Exception e)

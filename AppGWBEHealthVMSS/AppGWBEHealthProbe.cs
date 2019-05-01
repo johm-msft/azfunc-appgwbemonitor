@@ -9,6 +9,8 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Microsoft.Azure.Management.ResourceManager.Fluent;
 using Microsoft.Azure.Management.Network.Fluent;
+using Microsoft.Azure.Management.Network.Fluent.Models;
+using Microsoft.Azure.Management.Compute.Fluent;
 using Microsoft.Azure.Management.Fluent;
 using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
 using AppGWBEHealthVMSS.shared;
@@ -36,8 +38,14 @@ namespace AppGWBEHealthVMSS
                 log.LogInformation("Creating Azure Client for BE Health Function");
                 var azEnvironment = AzureEnvironment.AzureGlobalCloud;
                 var azClient = AzureClient.CreateAzureClient(clientID, clientSecret, tenantID, azEnvironment, subscriptionID);
+                var scaleSet = azClient.VirtualMachineScaleSets.GetByResourceGroup(resourcegroupname, scaleSetName);
+                var appGw = azClient.ApplicationGateways.GetByResourceGroup(resourcegroupname, appGwName);
+                var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
+                
+              
+
                 log.LogInformation("Checking Application Gateway BE ");
-                ApplicationGatewayOperations.CheckApplicationGatewayBEHealth(azClient, resourcegroupname, appGwName, scaleSetName, log);
+                ApplicationGatewayOperations.CheckApplicationGatewayBEHealth(appGwBEHealth, scaleSet, log);
             }
             catch (Exception e)
             {

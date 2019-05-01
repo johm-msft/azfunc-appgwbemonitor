@@ -17,11 +17,11 @@ namespace AppGWBEHealthVMSS.shared
 {
     class VmScaleSetOperations
     {
-        public static void RemoveVMSSInstanceByID(IAzure azureClient,string rgName, string scaleSetName,List<string> serverIPs,ILogger log)
+        public static void RemoveVMSSInstanceByID(IVirtualMachineScaleSet scaleSet,List<string> serverIPs,ILogger log)
         {
             try
             {
-                var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
+                
                 log.LogInformation("Enumerating VM Instances in ScaleSet");
                 var vms = scaleSet.VirtualMachines.List();
                 var virtualmachines = vms.Where(x => x.Inner.ProvisioningState == "Succeeded");
@@ -59,14 +59,14 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation("Error Message: " + e.Message);
             }
         }
-        public static void ScaleEvent(IAzure azureClient, string rgName, string scaleSetName, int scaleNodeCount, ILogger log)
+        public static void ScaleEvent(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, ILogger log)
         {
             try
             {
                 
-                var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
+                
                 int scaler = scaleSet.VirtualMachines.List().Count() + scaleNodeCount;
-                log.LogInformation("Scale Event in ScaleSet {0}", scaleSetName);
+                log.LogInformation("Scale Event in ScaleSet {0}", scaleSet.Name);
                 scaleSet.Inner.Sku.Capacity = scaler;
                 scaleSet.Update().ApplyAsync();
 
@@ -78,13 +78,13 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation("Error Message: " + e.Message);
             }
         }
-        public static void CoolDownEvent(IAzure azureClient, string rgName, string scaleSetName, ILogger log)
+        public static void CoolDownEvent(IVirtualMachineScaleSet scaleSet, ILogger log)
         {
             try
             {
                 int scaleDownCount = 10;
                 int scaler = 0;
-                var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
+                
                 
                 if (scaleSet.Inner.Sku.Capacity <= 13)
                 {
@@ -94,7 +94,7 @@ namespace AppGWBEHealthVMSS.shared
                 }
                 else
                 {
-                    log.LogInformation("Scale Down Event in ScaleSet {0}", scaleSetName);
+                    log.LogInformation("Scale Down Event in ScaleSet {0}", scaleSet.Name);
                     scaler = scaleSet.VirtualMachines.List().Count() - scaleDownCount;
                     
                 }

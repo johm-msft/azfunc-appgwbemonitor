@@ -10,35 +10,39 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Azure.Management.ResourceManager.Fluent;
 using Microsoft.Azure.Management.Network.Fluent;
+using Microsoft.Azure.Management.Network.Fluent.Models;
 using Microsoft.Azure.Management.Fluent;
+using Microsoft.Azure.Management.Compute.Fluent;
 using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
 
 namespace AppGWBEHealthVMSS.shared
 {
     class ApplicationGatewayOperations
     {
-        public static void CheckApplicationGatewayBEHealth(IAzure azureClient, string rgName, string appGwName,string scaleSetName, ILogger log)
+        public static void CheckApplicationGatewayBEHealth(ApplicationGatewayBackendHealthInner appGw, IVirtualMachineScaleSet scaleSet, ILogger log)
         {
             try
             {
-                log.LogInformation("Enumerating Application Gateway: {0} Backend Unhealthy Servers", appGwName);
-                var appGw = azureClient.ApplicationGateways.Inner.BackendHealthAsync(rgName, appGwName).Result;
+                
+               
+                log.LogInformation("Enumerating Application Gateway Backend Unhealthy Servers");
+                
                 var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Unhealthy"));
                 List<string> appGwBadIps = new List<string>();
+                var healthyServers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
                 
                 foreach (var server in servers)
                 {
-                    var healthyServers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
                     
                     if (healthyServers.Count() <3)
                     {
-                        var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
+                        
                         if(scaleSet.Inner.ProvisioningState == "Succeeded")
                         {
                             log.LogInformation("No updates occuring on ScaleSet");
                             log.LogInformation("Trigger Scale Event as Healthy Nodes is less than 3");
                             int scaleNodeCount = healthyServers.Count() + 3;
-                            VmScaleSetOperations.ScaleEvent(azureClient, rgName, scaleSetName, scaleNodeCount, log);
+                            VmScaleSetOperations.ScaleEvent(scaleSet, scaleNodeCount, log);
                         }
                     }
                    
@@ -48,7 +52,7 @@ namespace AppGWBEHealthVMSS.shared
                 }
 
                 log.LogInformation("Unhealthy nodes being removed");
-                VmScaleSetOperations.RemoveVMSSInstanceByID(azureClient, rgName, scaleSetName, appGwBadIps, log);
+                VmScaleSetOperations.RemoveVMSSInstanceByID(scaleSet, appGwBadIps, log);
             }
             catch (Exception e)
             {
@@ -59,12 +63,12 @@ namespace AppGWBEHealthVMSS.shared
             }
 
         }
-        public static int GetConcurrentConnectionCountAppGW(IAzure azureClient, string rgName, string appGwName, ILogger log)
+        public static int GetConcurrentConnectionCountAppGW(IApplicationGateway appGW, IAzure azureClient, ILogger log)
         {
             try
             {
                 int avgConcurrentConnections = 0;
-                var appGW = azureClient.ApplicationGateways.GetByResourceGroup(rgName, appGwName);
+                
                 log.LogInformation("Getting Metric Definitions");
                 var metricDefs = azureClient.MetricDefinitions.ListByResource(appGW.Id).Where(x => x.Name.LocalizedValue == "Current Connections");
                 DateTime recordDateTime = DateTime.Now.ToUniversalTime();
@@ -108,11 +112,11 @@ namespace AppGWBEHealthVMSS.shared
             }
             
         }
-        public static int AvgConnectionsPerNode(IAzure azureClient, string rgName, string appGwName, int conCurrentConnections, ILogger log)
+        public static int AvgConnectionsPerNode(ApplicationGatewayBackendHealthInner appGw, int conCurrentConnections, ILogger log)
         {
             try
             {
-                var appGw = azureClient.ApplicationGateways.Inner.BackendHealthAsync(rgName, appGwName).Result;
+                
                 var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
                 var healthyServersCount = servers.Count();
                 int avgConnsPerNode = conCurrentConnections / healthyServersCount;
@@ -128,11 +132,11 @@ namespace AppGWBEHealthVMSS.shared
             }
         }
         
-        public static int IdealNumberofNodes(IAzure azureClient, string rgName, string appGwName, int conCurrentConnections, ILogger log)
+        public static int IdealNumberofNodes(ApplicationGatewayBackendHealthInner appGw, int conCurrentConnections, ILogger log)
         {
             try
             {
-                var appGw = azureClient.ApplicationGateways.Inner.BackendHealthAsync(rgName, appGwName).Result;
+                
                 var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
                 var healthyServersCount = servers.Count();
                 int idealNodeNumber = (conCurrentConnections / 3) - healthyServersCount;
