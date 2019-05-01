@@ -41,6 +41,7 @@ namespace AppGWBEHealthVMSS.shared
                             VmScaleSetOperations.ScaleEvent(azureClient, rgName, scaleSetName, scaleNodeCount, log);
                         }
                     }
+                   
                     appGwBadIps.Add(server.Address);                   
                                    
 

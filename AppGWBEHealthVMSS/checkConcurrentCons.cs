@@ -11,7 +11,7 @@ namespace AppGWBEHealthVMSS
     public static class CheckConcurrentCons
     {
         [FunctionName("checkConcurrentCons")]
-        public static void Run([TimerTrigger("0 * * * * *")]TimerInfo myTimer, ILogger log)
+        public static void Run([TimerTrigger("0/30 * * * * *")]TimerInfo myTimer, ILogger log)
         {
             string clientID = System.Environment.GetEnvironmentVariable("clientID");
             string clientSecret = System.Environment.GetEnvironmentVariable("clientSecret");
@@ -51,6 +51,11 @@ namespace AppGWBEHealthVMSS
                    }
                    
 
+                }
+                if(avgConnectionsPerNode < 3)
+                {
+                    log.LogInformation("Scale Down ");
+                    VmScaleSetOperations.CoolDownEvent(azClient, resourcegroupname, scaleSetName, log);
                 }
                 
 

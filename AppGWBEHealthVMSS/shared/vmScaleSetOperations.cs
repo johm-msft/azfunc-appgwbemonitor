@@ -47,7 +47,7 @@ namespace AppGWBEHealthVMSS.shared
                 {
                     string[] badInstancesArray = badInstances.ToArray();
                     log.LogInformation("Removing Bad Instances");
-                    scaleSet.VirtualMachines.DeleteInstances(badInstancesArray);
+                    scaleSet.VirtualMachines.DeleteInstancesAsync(badInstancesArray);
                 }
                 else
                 {
@@ -68,7 +68,7 @@ namespace AppGWBEHealthVMSS.shared
                 int scaler = scaleSet.VirtualMachines.List().Count() + scaleNodeCount;
                 log.LogInformation("Scale Event in ScaleSet {0}", scaleSetName);
                 scaleSet.Inner.Sku.Capacity = scaler;
-                scaleSet.Update().Apply();
+                scaleSet.Update().ApplyAsync();
 
 
 
@@ -78,8 +78,28 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation("Error Message: " + e.Message);
             }
         }
-       
-      
-     
+        public static void CoolDownEvent(IAzure azureClient, string rgName, string scaleSetName, ILogger log)
+        {
+            try
+            {
+                int scaleDownCount = 10;
+                var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
+                int scaler = scaleSet.VirtualMachines.List().Count() - scaleDownCount;
+                log.LogInformation("Scale Down Event in ScaleSet {0}", scaleSetName);
+                scaleSet.Inner.Sku.Capacity = scaler;
+                scaleSet.Update().ApplyAsync();
+
+
+
+            }
+            catch (Exception e)
+            {
+                log.LogInformation("Error Message: " + e.Message);
+            }
+        }
+
+
+
+
     }
 }
