@@ -25,11 +25,11 @@ namespace AppGWBEHealthVMSS.shared
                 var appGw = azureClient.ApplicationGateways.Inner.BackendHealthAsync(rgName, appGwName).Result;
                 var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Unhealthy"));
                 List<string> appGwBadIps = new List<string>();
-
+                
                 foreach (var server in servers)
                 {
                     var healthyServers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
-                    log.LogInformation("Healthy Server Count: {0}", healthyServers.Count().ToString());
+                    
                     if (healthyServers.Count() <3)
                     {
                         var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
@@ -118,6 +118,25 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation("Healthy Node Count: {0} ",healthyServersCount);
                 log.LogInformation("Average Connections Per node: {0}", avgConnsPerNode);
                 return avgConnsPerNode;
+
+            }
+            catch (Exception e)
+            {
+                log.LogInformation("Error Message: " + e.Message);
+                return 0;
+            }
+        }
+        
+        public static int IdealNumberofNodes(IAzure azureClient, string rgName, string appGwName, int conCurrentConnections, ILogger log)
+        {
+            try
+            {
+                var appGw = azureClient.ApplicationGateways.Inner.BackendHealthAsync(rgName, appGwName).Result;
+                var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
+                var healthyServersCount = servers.Count();
+                int idealNodeNumber = (conCurrentConnections / 3) - healthyServersCount;
+                log.LogInformation("Healthy Node Count: {0} Average Connections Per node: {1}",healthyServersCount,idealNodeNumber);
+                return idealNodeNumber;
 
             }
             catch (Exception e)

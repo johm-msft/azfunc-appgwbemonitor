@@ -31,11 +31,25 @@ namespace AppGWBEHealthVMSS
                 var currentConnectionCount = ApplicationGatewayOperations.GetConcurrentConnectionCountAppGW(azClient, resourcegroupname, appGwName, log);
                 log.LogInformation("Calculating Average Connections Per Node");
                 var avgConnectionsPerNode = ApplicationGatewayOperations.AvgConnectionsPerNode(azClient, resourcegroupname, appGwName, currentConnectionCount, log);
+                log.LogInformation("Calculating Ideal Node Count");
+                var idealNumberofNodes = ApplicationGatewayOperations.IdealNumberofNodes(azClient, resourcegroupname, appGwName, currentConnectionCount, log);
+
                 if(avgConnectionsPerNode >= 3)
                 {
-                    int scaleNodeCount = 10;
-                    log.LogInformation("Scale Event Initiated");
-                    VmScaleSetOperations.ScaleEvent(azClient, resourcegroupname, scaleSetName, scaleNodeCount, log);
+                   if(idealNumberofNodes <= 10)
+                   {
+                       int scaleNodeCount = idealNumberofNodes;
+                       log.LogInformation("Scale Event Initiated");
+                       VmScaleSetOperations.ScaleEvent(azClient, resourcegroupname, scaleSetName, scaleNodeCount, log);
+
+                   } 
+                   else 
+                   {
+                        int scaleNodeCount = 10;
+                        log.LogInformation("Scale Event Initiated");
+                        VmScaleSetOperations.ScaleEvent(azClient, resourcegroupname, scaleSetName, scaleNodeCount, log);
+                   }
+                   
 
                 }
                 
