@@ -83,9 +83,21 @@ namespace AppGWBEHealthVMSS.shared
             try
             {
                 int scaleDownCount = 10;
+                int scaler = 0;
                 var scaleSet = azureClient.VirtualMachineScaleSets.GetByResourceGroup(rgName, scaleSetName);
-                int scaler = scaleSet.VirtualMachines.List().Count() - scaleDownCount;
-                log.LogInformation("Scale Down Event in ScaleSet {0}", scaleSetName);
+                
+                if (scaleSet.Inner.Sku.Capacity <= 13)
+                {
+                    scaler = scaleSet.VirtualMachines.List().Count() - 1;
+                    log.LogInformation("Current Node Capacity is less than 10 reducing scale down node count to 1");
+                    
+                }
+                else
+                {
+                    log.LogInformation("Scale Down Event in ScaleSet {0}", scaleSetName);
+                    scaler = scaleSet.VirtualMachines.List().Count() - scaleDownCount;
+                    
+                }
                 scaleSet.Inner.Sku.Capacity = scaler;
                 scaleSet.Update().ApplyAsync();
 
