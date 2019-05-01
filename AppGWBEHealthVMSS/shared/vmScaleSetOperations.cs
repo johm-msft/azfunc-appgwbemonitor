@@ -98,8 +98,17 @@ namespace AppGWBEHealthVMSS.shared
                     scaler = scaleSet.VirtualMachines.List().Count() - scaleDownCount;
                     
                 }
-                scaleSet.Inner.Sku.Capacity = scaler;
-                scaleSet.Update().ApplyAsync();
+
+                if ((scaleSet.VirtualMachines.List().Count() - scaler) >= 3)
+                {
+                    log.LogInformation("VMSS Instance Count is greater than 3");
+                    scaleSet.Inner.Sku.Capacity = scaler;
+                    scaleSet.Update().ApplyAsync();
+                }
+                else
+                {
+                    log.LogInformation("VMSS Instance Count is less than 3, no further cooldown allowed");
+                }
 
 
 
