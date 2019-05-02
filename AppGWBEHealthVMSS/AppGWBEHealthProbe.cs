@@ -29,11 +29,10 @@ namespace AppGWBEHealthVMSS
             string tenantID = Utils.GetEnvVariableOrDefault("tenantID", "a8175357-a762-478b-b724-6c2bd3f3f45e");
             string location = Utils.GetEnvVariableOrDefault("location");
             string subscriptionID = Utils.GetEnvVariableOrDefault("subscriptionID");
-            string resourcegroupname = Utils.GetEnvVariableOrDefault("resourceGroupName");
-            string appGwName = Utils.GetEnvVariableOrDefault("appGwName", "gobibearappGw");
-            string scaleSetName = Utils.GetEnvVariableOrDefault("scaleSetName", "gobibear");
-            int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("maxConcurrentConnectionsPerNode", 3);
-            int minHealthyServers = Utils.GetEnvVariableOrDefault("minHealthyServers", 3);
+            string resourcegroupname = Utils.GetEnvVariableOrDefault("_resourceGroupName");
+            string appGwName = Utils.GetEnvVariableOrDefault("_appGwName", "gobibearappGw");
+            string scaleSetName = Utils.GetEnvVariableOrDefault("_scaleSetName", "gobibear");
+            int minHealthyServers = Utils.GetEnvVariableOrDefault("_minHealthyServers", 3);
             try
             {
                 log.LogInformation("Creating Azure Client for BE Health Function");

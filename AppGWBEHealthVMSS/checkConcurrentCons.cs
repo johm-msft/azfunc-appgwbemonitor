@@ -20,12 +20,12 @@ namespace AppGWBEHealthVMSS
             string tenantID = Utils.GetEnvVariableOrDefault("tenantID", "a8175357-a762-478b-b724-6c2bd3f3f45e");
             string location = Utils.GetEnvVariableOrDefault("location");
             string subscriptionID = Utils.GetEnvVariableOrDefault("subscriptionID");
-            string resourcegroupname = Utils.GetEnvVariableOrDefault("resourceGroupName");
-            string appGwName = Utils.GetEnvVariableOrDefault("appGwName", "gobibearappGw");
-            string scaleSetName = Utils.GetEnvVariableOrDefault("scaleSetName", "gobibear");
-            int minHealthyServers = Utils.GetEnvVariableOrDefault("minHealthyServers", 3);
-            int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("maxConcurrentConnectionsPerNode", 3);
-            int scaleByNodeCount = Utils.GetEnvVariableOrDefault("scaleByNodeCount", 10);
+            string resourcegroupname = Utils.GetEnvVariableOrDefault("_resourceGroupName");
+            string appGwName = Utils.GetEnvVariableOrDefault("_appGwName", "gobibearappGw");
+            string scaleSetName = Utils.GetEnvVariableOrDefault("_scaleSetName", "gobibear");
+            int minHealthyServers = Utils.GetEnvVariableOrDefault("_minHealthyServers", 3);
+            int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
+            int scaleByNodeCount = Utils.GetEnvVariableOrDefault("_scaleByNodeCount", 10);
 
             try
             {
