@@ -11,24 +11,26 @@ using Microsoft.Azure.Management.Network.Fluent;
 using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
 using Microsoft.Azure.Management.Fluent;
 using Microsoft.Extensions.Logging;
-
+using System.Threading.Tasks;
 
 namespace AppGWBEHealthVMSS.shared
 {
     class VmScaleSetOperations
     {
-        public static void RemoveVMSSInstanceByID(IVirtualMachineScaleSet scaleSet,List<string> serverIPs,ILogger log)
+        public static Task RemoveVMSSInstanceByID(IVirtualMachineScaleSet scaleSet, List<string> serverIPs, ILogger log)
         {
             try
             {
-                
+                // TODO: would be nice to pass a flag to this function saying only delete unhealthy nodes that
+                // have been up for > 30 seconds or something to allow them to start and be recognized
                 log.LogInformation("Enumerating VM Instances in ScaleSet");
-                var vms = scaleSet.VirtualMachines.List();
-                var virtualmachines = vms.Where(x => x.Inner.ProvisioningState == "Succeeded");
-                               
-                var vmssNodeCount = vms.Count();
+                var vms = scaleSet.VirtualMachines.List().ToList();
+                // only consider nodes which have been prtovisioned completely for removal
+                var virtualmachines = vms.Where(x => x.Inner.ProvisioningState == "Succeeded").ToList();
+
+                log.LogInformation($"{virtualmachines.Count} machines of {vms.Count} are completely provisioned, checking those for unhealthy nodes");
+
                 List<string> badInstances = new List<string>();
-                
               
                 foreach (var vm in virtualmachines)
                 {
@@ -37,81 +39,96 @@ namespace AppGWBEHealthVMSS.shared
                          log.LogInformation("Bad Instance detected: {0}", vm.InstanceId);
                          badInstances.Add(vm.InstanceId);
                    }
-                        
-                     
-                       
-
                 }
 
                 if (badInstances.Count() != 0)
                 {
                     string[] badInstancesArray = badInstances.ToArray();
                     log.LogInformation("Removing Bad Instances");
-                    scaleSet.VirtualMachines.DeleteInstancesAsync(badInstancesArray);
+                    return scaleSet.VirtualMachines.DeleteInstancesAsync(badInstancesArray);
                 }
                 else
                 {
-                    log.LogInformation("No Nodes Detected to Remove");
+                    log.LogInformation("No Running nodes detected to remove, likely because they are already deleting");
+                    return Task.CompletedTask;
                 }
             }
             catch (Exception e)
             {
                 log.LogInformation("Error Message: " + e.Message);
+                throw;
             }
         }
-        public static void ScaleEvent(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, ILogger log)
+
+        public static Task ScaleEvent(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, ILogger log)
         {
             try
             {
-                
-                
-                int scaler = scaleSet.VirtualMachines.List().Count() + scaleNodeCount;
-                log.LogInformation("Scale Event in ScaleSet {0}", scaleSet.Name);
+                var vms = scaleSet.VirtualMachines.List().ToList();
+                int scaler = vms.Count() + scaleNodeCount;
+                var maxNodes = scaleSet.Inner.SinglePlacementGroup ?? true ? 100 : 1000;
+
+                if (scaler > maxNodes)
+                {
+                    log.LogInformation("Scale request for ScaleSet {Scaleset} to {RequestedScale} nodes exceeeds limit, scaling to max allowed({MaxScale})",
+                        scaleSet.Name, scaler, maxNodes);
+                    scaler = maxNodes;
+                }
+
+                log.LogInformation("Scale Event in ScaleSet {0} to {1} nodes", scaleSet.Name, scaler);
                 scaleSet.Inner.Sku.Capacity = scaler;
-                scaleSet.Update().ApplyAsync();
-
-
-
+                return scaleSet.Update().ApplyAsync();
             }
             catch (Exception e)
             {
                 log.LogInformation("Error Message: " + e.Message);
+                throw;
             }
         }
-        public static void CoolDownEvent(IVirtualMachineScaleSet scaleSet, ILogger log)
+
+        /// <summary>
+        /// Scale down the pool by a hueristic amount of nodes
+        /// </summary>
+        /// <param name="scaleSet">Scale set.</param>
+        /// <param name="maxNumberOfNodesToScaleBy">Max number of nodes to scale by.</param>
+        /// <param name="minHealthyNodes">Minimum healthy nodes.</param>
+        /// <param name="log">Log.</param>
+        public static void CoolDownEvent(IVirtualMachineScaleSet scaleSet, int maxNumberOfNodesToScaleBy, int minHealthyNodes, ILogger log)
         {
             try
             {
-                int scaleDownCount = 10;
-                int scaler = 0;
-                
-                
-                if (scaleSet.Inner.Sku.Capacity <= 13)
+                // don't be super agressive, assume min bound is base + scale factor
+                int baseSteadyStateCount = maxNumberOfNodesToScaleBy + minHealthyNodes;
+
+                var targetNodeCount = minHealthyNodes;
+
+                var currentVmCount = (int)scaleSet.Inner.Sku.Capacity;
+
+                // if we are below min + scale factor then go down by 1 at a time
+                if (currentVmCount <= baseSteadyStateCount)
                 {
-                    scaler = scaleSet.VirtualMachines.List().Count() - 1;
-                    log.LogInformation("Current Node Capacity is less than 10 reducing scale down node count to 1");
-                    
+                    // just scale down by one node
+                    targetNodeCount = currentVmCount - 1;
                 }
                 else
                 {
-                    log.LogInformation("Scale Down Event in ScaleSet {0}", scaleSet.Name);
-                    scaler = scaleSet.VirtualMachines.List().Count() - scaleDownCount;
-                    
+                    targetNodeCount = Math.Max(currentVmCount - maxNumberOfNodesToScaleBy, baseSteadyStateCount);
                 }
 
-                if ((scaleSet.VirtualMachines.List().Count() - scaler) >= 3)
+                if (targetNodeCount < minHealthyNodes)
                 {
-                    log.LogInformation("VMSS Instance Count is greater than 3");
-                    scaleSet.Inner.Sku.Capacity = scaler;
+                    targetNodeCount = minHealthyNodes;
+                }
+                if (scaleSet.Inner.Sku.Capacity > targetNodeCount)
+                {
+                    log.LogInformation("Scale Down Event in ScaleSet {0} Scaling down to {1} nodes ", scaleSet.Name, targetNodeCount);
+                    scaleSet.Inner.Sku.Capacity = targetNodeCount;
                     scaleSet.Update().ApplyAsync();
                 }
                 else
                 {
-                    log.LogInformation("VMSS Instance Count is less than 3, no further cooldown allowed");
+                    log.LogInformation("No need to scale down, already at target count ({count})", targetNodeCount);
                 }
-
-
-
             }
             catch (Exception e)
             {

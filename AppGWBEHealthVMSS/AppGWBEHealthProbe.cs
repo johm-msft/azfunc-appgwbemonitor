@@ -24,15 +24,16 @@ namespace AppGWBEHealthVMSS
         [FunctionName("AppGWBEHealthProbe")]
         public static void Run([TimerTrigger("0 * * * * *")]TimerInfo myTimer, ILogger log)
         {
-            string clientID = System.Environment.GetEnvironmentVariable("clientID");
-            string clientSecret = System.Environment.GetEnvironmentVariable("clientSecret");
-            string tenantID = System.Environment.GetEnvironmentVariable("tenantID");
-            string location = System.Environment.GetEnvironmentVariable("location");
-            string subscriptionID = System.Environment.GetEnvironmentVariable("subscriptionID");
-            string resourcegroupname = System.Environment.GetEnvironmentVariable("resourceGroupName");
-            string appGwName = System.Environment.GetEnvironmentVariable("appGwName");
-            string scaleSetName = System.Environment.GetEnvironmentVariable("scaleSetName");
-
+            string clientID = Utils.GetEnvVariableOrDefault("clientID");
+            string clientSecret = Utils.GetEnvVariableOrDefault("clientSecret");
+            string tenantID = Utils.GetEnvVariableOrDefault("tenantID", "a8175357-a762-478b-b724-6c2bd3f3f45e");
+            string location = Utils.GetEnvVariableOrDefault("location");
+            string subscriptionID = Utils.GetEnvVariableOrDefault("subscriptionID");
+            string resourcegroupname = Utils.GetEnvVariableOrDefault("resourceGroupName");
+            string appGwName = Utils.GetEnvVariableOrDefault("appGwName", "gobibearappGw");
+            string scaleSetName = Utils.GetEnvVariableOrDefault("scaleSetName", "gobibear");
+            int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("maxConcurrentConnectionsPerNode", 3);
+            int minHealthyServers = Utils.GetEnvVariableOrDefault("minHealthyServers", 3);
             try
             {
                 log.LogInformation("Creating Azure Client for BE Health Function");
@@ -41,23 +42,14 @@ namespace AppGWBEHealthVMSS
                 var scaleSet = azClient.VirtualMachineScaleSets.GetByResourceGroup(resourcegroupname, scaleSetName);
                 var appGw = azClient.ApplicationGateways.GetByResourceGroup(resourcegroupname, appGwName);
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
-                
-              
-
                 log.LogInformation("Checking Application Gateway BE ");
-                ApplicationGatewayOperations.CheckApplicationGatewayBEHealth(appGwBEHealth, scaleSet, log);
+
+                ApplicationGatewayOperations.CheckApplicationGatewayBEHealth(appGwBEHealth, scaleSet, minHealthyServers, log);
             }
             catch (Exception e)
             {
                 log.LogInformation("Error Message: " + e.Message);
             }
-
-
-
-
-
-
-
         }
     }
 }

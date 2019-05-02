@@ -19,137 +19,103 @@ namespace AppGWBEHealthVMSS.shared
 {
     class ApplicationGatewayOperations
     {
-        public static void CheckApplicationGatewayBEHealth(ApplicationGatewayBackendHealthInner appGw, IVirtualMachineScaleSet scaleSet, ILogger log)
+        public static void CheckApplicationGatewayBEHealth(ApplicationGatewayBackendHealthInner appGw, IVirtualMachineScaleSet scaleSet, int minHealthyServers, ILogger log)
         {
             try
             {
-                
-               
                 log.LogInformation("Enumerating Application Gateway Backend Unhealthy Servers");
-                
-                var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Unhealthy"));
-                List<string> appGwBadIps = new List<string>();
-                var healthyServers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
-                
-                foreach (var server in servers)
+                 var healthy = new List<ApplicationGatewayBackendHealthServer>();
+                var unhealthy = new List<ApplicationGatewayBackendHealthServer>();
+                foreach (var server in appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers)
                 {
-                    
-                    if (healthyServers.Count() <3)
+                    if (server.Health.Value == "Healthy")
                     {
-                        
-                        if(scaleSet.Inner.ProvisioningState == "Succeeded")
-                        {
-                            log.LogInformation("No updates occuring on ScaleSet");
-                            log.LogInformation("Trigger Scale Event as Healthy Nodes is less than 3");
-                            int scaleNodeCount = healthyServers.Count() + 3;
-                            VmScaleSetOperations.ScaleEvent(scaleSet, scaleNodeCount, log);
-                        }
+                        healthy.Add(server);
                     }
-                   
-                    appGwBadIps.Add(server.Address);                   
-                                   
-
+                    else
+                    {
+                        unhealthy.Add(server);
+                    }
                 }
+     
+                List<string> appGwBadIps = new List<string>();
 
-                log.LogInformation("Unhealthy nodes being removed");
-                VmScaleSetOperations.RemoveVMSSInstanceByID(scaleSet, appGwBadIps, log);
+                if (unhealthy.Count > 0)
+                {
+                    log.LogInformation("Unhealthy node count = {0}, removing nodes", unhealthy.Count);
+                    VmScaleSetOperations.RemoveVMSSInstanceByID(scaleSet, unhealthy.Select(s => s.Address).ToList(), log).ContinueWith(t => log.LogInformation("Delete VMs complete"));
+                }
             }
             catch (Exception e)
             {
                 log.LogInformation("Error Message: " + e.Message);
                 log.LogInformation("HResult: " + e.HResult);
                 log.LogInformation("InnerException:" + e.InnerException);
-
             }
 
         }
-        public static int GetConcurrentConnectionCountAppGW(IApplicationGateway appGW, IAzure azureClient, ILogger log)
+        public static ConnectionInfo GetConcurrentConnectionCountAppGW(IApplicationGateway appGW, IAzure azureClient, ILogger log)
         {
             try
             {
                 int avgConcurrentConnections = 0;
-                
+                int avgTotalRequests = 0;
+
                 log.LogInformation("Getting Metric Definitions");
-                var metricDefs = azureClient.MetricDefinitions.ListByResource(appGW.Id).Where(x => x.Name.LocalizedValue == "Current Connections");
+                var metricDefs = azureClient.MetricDefinitions.ListByResource(appGW.Id).Where(x => x.Name.LocalizedValue == "Current Connections" || x.Name.LocalizedValue == "Total Requests");
                 DateTime recordDateTime = DateTime.Now.ToUniversalTime();
-                
+
                 foreach (var metricDef in metricDefs)
                 {
-                    log.LogInformation("Running Metric Query");
-                    var metricCollection = metricDef.DefineQuery().StartingFrom(recordDateTime.AddMinutes(-1)).EndsBefore(recordDateTime).WithAggregation("Average").Execute();
-                         
-                      foreach (var metric in metricCollection.Metrics)
-                      {
-                             
-                         foreach (var timeElement in metric.Timeseries)
-                         {
-                                                                   
-                                    
+                    var metricCollection = metricDef.DefineQuery().StartingFrom(recordDateTime.AddMinutes(-1)).EndsBefore(recordDateTime).WithAggregation("Maximum").Execute();
+                    foreach (var metric in metricCollection.Metrics)
+                    {
+                        foreach (var timeElement in metric.Timeseries)
+                        {
                             foreach (var data in timeElement.Data)
                             {
-
-                                    log.LogInformation("Avgerage Concurrent Connections: {0}", data.Average);
-                                    avgConcurrentConnections = Convert.ToInt32(data.Average);
-                                    
-
+                                if (metric.Name.Inner.LocalizedValue == "Current Connections")
+                                {
+                                    log.LogInformation("Concurrent Connections: {0}", data.Maximum);
+                                    avgConcurrentConnections = Convert.ToInt32(data.Maximum);
+                                }
+                                if (metric.Name.Inner.LocalizedValue == "Total Requests")
+                                {
+                                    log.LogInformation("Total Requests: {0}", data.Maximum);
+                                    avgTotalRequests = Convert.ToInt32(data.Maximum);
+                                }
                             }
-
-                         }
-                      }
-
-                    
-
+                        }
+                    }
                 }
-                return avgConcurrentConnections;    
+                return new ConnectionInfo { CurrentConnections = avgConcurrentConnections, TotalRequests = avgTotalRequests };
             }
             catch (Exception e)
             {
                 
-                log.LogInformation("Error Message: " + e.Message);
-                log.LogInformation("HResult: " + e.HResult);
-                log.LogInformation("InnerException:" + e.InnerException);
-                return 0;
+                log.LogError(e, "Error Getting metrics: " + e.ToString());
+                throw;
             }
             
         }
-        public static int AvgConnectionsPerNode(ApplicationGatewayBackendHealthInner appGw, int conCurrentConnections, ILogger log)
+
+        public static Tuple<int, int> GetHealthyAndUnhealthyNodeCounts(ApplicationGatewayBackendHealthInner appGw, ILogger log)
         {
-            try
+            var healthy = 0;
+            var unhealthy = 0;
+            foreach (var h in appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Select(s=>s.Health.Value))
             {
-                
-                var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
-                var healthyServersCount = servers.Count();
-                int avgConnsPerNode = conCurrentConnections / healthyServersCount;
-                log.LogInformation("Healthy Node Count: {0} ",healthyServersCount);
-                log.LogInformation("Average Connections Per node: {0}", avgConnsPerNode);
-                return avgConnsPerNode;
-
+                switch (h.ToLower())
+                {
+                    case "healthy":
+                        healthy++;
+                        break;
+                    default:
+                        unhealthy++;
+                        break;
+                }
             }
-            catch (Exception e)
-            {
-                log.LogInformation("Error Message: " + e.Message);
-                return 0;
-            }
+            return new Tuple<int, int>(healthy, unhealthy);
         }
-        
-        public static int IdealNumberofNodes(ApplicationGatewayBackendHealthInner appGw, int conCurrentConnections, ILogger log)
-        {
-            try
-            {
-                
-                var servers = appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers.Where(x => x.Health.Value.Equals("Healthy"));
-                var healthyServersCount = servers.Count();
-                int idealNodeNumber = (conCurrentConnections / 3) - healthyServersCount;
-                log.LogInformation("Healthy Node Count: {0} Average Connections Per node: {1}",healthyServersCount,idealNodeNumber);
-                return idealNodeNumber;
-
-            }
-            catch (Exception e)
-            {
-                log.LogInformation("Error Message: " + e.Message);
-                return 0;
-            }
-        }
-
     }
 }
