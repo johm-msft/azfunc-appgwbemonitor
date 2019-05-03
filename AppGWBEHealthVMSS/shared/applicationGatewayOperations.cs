@@ -58,16 +58,19 @@ namespace AppGWBEHealthVMSS.shared
         {
             try
             {
-                int avgConcurrentConnections = 0;
-                int avgTotalRequests = 0;
+                int? currentConnections = null;
+                int? totalRequests = null;
+                int? responseStatus = null;
+                Dictionary<string, object> metricsByName = new Dictionary<string, object>();
 
                 log.LogInformation("Getting Metric Definitions");
-                var metricDefs = azureClient.MetricDefinitions.ListByResource(appGW.Id).Where(x => x.Name.LocalizedValue == "Current Connections" || x.Name.LocalizedValue == "Total Requests");
+                var metricDefs = azureClient.MetricDefinitions.ListByResource(appGW.Id);
                 DateTime recordDateTime = DateTime.Now.ToUniversalTime();
 
                 foreach (var metricDef in metricDefs)
                 {
-                    var metricCollection = metricDef.DefineQuery().StartingFrom(recordDateTime.AddMinutes(-1)).EndsBefore(recordDateTime).WithAggregation("Maximum").Execute();
+                    // Go back, 5 mins and grab most recent value
+                    var metricCollection = metricDef.DefineQuery().StartingFrom(recordDateTime.AddMinutes(-5)).EndsBefore(recordDateTime).WithAggregation("Maximum").Execute();
                     foreach (var metric in metricCollection.Metrics)
                     {
                         foreach (var timeElement in metric.Timeseries)
@@ -76,19 +79,36 @@ namespace AppGWBEHealthVMSS.shared
                             {
                                 if (metric.Name.Inner.LocalizedValue == "Current Connections")
                                 {
-                                    log.LogInformation("Concurrent Connections: {0}", data.Maximum);
-                                    avgConcurrentConnections = Convert.ToInt32(data.Maximum);
+                                    if (data.Maximum.HasValue)
+                                    {
+                                        currentConnections = Convert.ToInt32(data.Maximum);
+                                    }
                                 }
                                 if (metric.Name.Inner.LocalizedValue == "Total Requests")
                                 {
-                                    log.LogInformation("Total Requests: {0}", data.Maximum);
-                                    avgTotalRequests = Convert.ToInt32(data.Maximum);
+                                    if (data.Maximum.HasValue)
+                                    {
+                                        totalRequests = Convert.ToInt32(data.Maximum);
+                                    }
                                 }
+                                if (metric.Name.Inner.LocalizedValue == "Response Status")
+                                {
+                                    if (data.Maximum.HasValue)
+                                    {
+                                        responseStatus = Convert.ToInt32(data.Maximum);
+                                    }
+                                }
+                                metricsByName[metric.Name.Inner.Value] = data.Maximum;
                             }
                         }
                     }
                 }
-                return new ConnectionInfo { CurrentConnections = avgConcurrentConnections, TotalRequests = avgTotalRequests };
+                Console.WriteLine("Metrics:");
+                foreach (var x in metricsByName.Keys)
+                {
+                    Console.WriteLine($"{x} : {metricsByName[x]}");
+                }
+                return new ConnectionInfo { CurrentConnections = currentConnections, TotalRequests = totalRequests, ResponseStatus = responseStatus };
             }
             catch (Exception e)
             {

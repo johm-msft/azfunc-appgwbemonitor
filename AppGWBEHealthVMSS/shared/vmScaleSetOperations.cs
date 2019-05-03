@@ -34,11 +34,18 @@ namespace AppGWBEHealthVMSS.shared
               
                 foreach (var vm in virtualmachines)
                 {
-                   if(serverIPs.Contains(vm.ListNetworkInterfaces().First().Inner.IpConfigurations.First().PrivateIPAddress))
-                   {
-                         log.LogInformation("Bad Instance detected: {0}", vm.InstanceId);
-                         badInstances.Add(vm.InstanceId);
-                   }
+                    try
+                    {
+                        if (serverIPs.Contains(vm.ListNetworkInterfaces().First().Inner.IpConfigurations.First().PrivateIPAddress))
+                        {
+                            log.LogInformation("Bad Instance detected: {0}", vm.InstanceId);
+                            badInstances.Add(vm.InstanceId);
+                        }
+                    }
+                    catch(Exception)
+                    {
+                        log.LogError($"Error reading ip config by vm id {vm.Id}");
+                    }
                 }
 
                 if (badInstances.Count() != 0)
@@ -55,7 +62,7 @@ namespace AppGWBEHealthVMSS.shared
             }
             catch (Exception e)
             {
-                log.LogInformation("Error Message: " + e.Message);
+                log.LogError(e, "Error Removing VMs " + e);
                 throw;
             }
         }
@@ -66,7 +73,8 @@ namespace AppGWBEHealthVMSS.shared
             {
                 var vms = scaleSet.VirtualMachines.List().ToList();
                 int scaler = vms.Count() + scaleNodeCount;
-                var maxNodes = scaleSet.Inner.SinglePlacementGroup ?? true ? 100 : 1000;
+                var maxNodes = 100;// hard code to 100 TODO: make configurable
+                //var maxNodes = scaleSet.Inner.SinglePlacementGroup ?? true ? 100 : 1000;
 
                 if (scaler > maxNodes)
                 {
