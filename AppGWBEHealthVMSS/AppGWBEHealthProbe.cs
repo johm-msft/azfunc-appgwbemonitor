@@ -43,7 +43,7 @@ namespace AppGWBEHealthVMSS
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
                 log.LogInformation("Checking Application Gateway BE ");
 
-                ApplicationGatewayOperations.CheckApplicationGatewayBEHealth(appGwBEHealth, scaleSet, minHealthyServers, log);
+                ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
             }
             catch (Exception e)
             {

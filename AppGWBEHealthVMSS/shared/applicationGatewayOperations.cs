@@ -20,7 +20,7 @@ namespace AppGWBEHealthVMSS.shared
     class ApplicationGatewayOperations
     {
 
-        public static bool CheckApplicationGatewayBEHealth(ApplicationGatewayBackendHealthInner appGw, IVirtualMachineScaleSet scaleSet, int minHealthyServers, ILogger log)
+        public static bool CheckApplicationGatewayBEHealthAndDeleteBadNodes(ApplicationGatewayBackendHealthInner appGw, IVirtualMachineScaleSet scaleSet, int minHealthyServers, ILogger log)
         {
             try
             {

@@ -15,29 +15,16 @@ namespace AppGWBEHealthVMSS
     public static class CheckConcurrentCons
     {
         public static Stopwatch sw = null;
+        public static int runCount = 0;
         private static List<int> scaleDownRequests = new List<int>();
 
         static bool doRemainder = false;
         [FunctionName("checkConcurrentCons")]
-        public static void Run([TimerTrigger("0 */3 * * * *")]TimerInfo myTimer, ILogger log)
+        public static void Run([TimerTrigger("0 * * * * *")]TimerInfo myTimer, ILogger log)
         {
-
             log.LogInformation("Main Timer");
             doCheck(log);
         }
-
-        //[FunctionName("doCatchup")]
-        //public static void RunCatchup([TimerTrigger("0/5 * * * * *")]TimerInfo myTimer, ILogger log)
-        //{
-        //    log.LogInformation("Fast Timer");
-
-        //    if (doRemainder)
-        //    {
-        //        log.LogInformation("Doing Remainder");
-
-        //        doCheck(log);
-        //    }
-        //}
 
         public static void doCheck(ILogger log)
         { 
@@ -45,6 +32,11 @@ namespace AppGWBEHealthVMSS
             {
                 sw = Stopwatch.StartNew();
             }
+            // do full run every 3 times
+            bool cleanup = runCount % 3 == 0;
+            bool scaleup = runCount % 2 == 0;
+            runCount++;
+
             string clientID = Utils.GetEnvVariableOrDefault("clientID");
             string clientSecret = Utils.GetEnvVariableOrDefault("clientSecret");
             string tenantID = Utils.GetEnvVariableOrDefault("tenantID", "a8175357-a762-478b-b724-6c2bd3f3f45e");
@@ -69,10 +61,15 @@ namespace AppGWBEHealthVMSS
                 log.LogInformation($"Got AppGateway: {appGw.Id}");
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
                 // EXPERIMENT, removing nodes here rather than in other function
-                //log.LogInformation($"Scaleset size BEFORE checking for bad nodes is {scaleSet.Capacity}");
-                //// Remove any bad nodes first
-                //ApplicationGatewayOperations.CheckApplicationGatewayBEHealth(appGwBEHealth, scaleSet, minHealthyServers, log);
-                //log.LogInformation($"Scaleset size AFTER checking for bad nodes is {scaleSet.Capacity}");
+
+                // Only run deletes every now and again
+                if (cleanup)
+                {
+                    log.LogInformation($"Scaleset size BEFORE checking for bad nodes is {scaleSet.Capacity}");
+                    //// Remove any bad nodes first
+                    ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
+                    log.LogInformation($"Scaleset size AFTER checking for bad nodes is {scaleSet.Capacity}");
+                }
 
                 var healthyUnhealthyCounts = ApplicationGatewayOperations.GetHealthyAndUnhealthyNodeCounts(appGwBEHealth, log);
                 var healthyNodeCount = healthyUnhealthyCounts.Item1;
@@ -120,7 +117,6 @@ namespace AppGWBEHealthVMSS
                 //
                 double rps = Math.Max(connectionInfo.ResponseStatus.Value, connectionInfo.TotalRequests ?? 0) / 60.0;
                 log.LogInformation($"ResponseStatus: { connectionInfo.ResponseStatus.Value } Total Requests: {connectionInfo.TotalRequests ?? 0} RPS: {rps}");
-                //var avgRequestsPerSecondPerNode = rps / logicalHealthyNodeCount;
 
                 double idealNumberOfNodes = Math.Max(rps / maxConcurrentConnectionsPerNode, minHealthyServers);
                 log.LogInformation("Ideal Node Count based on ResponseStatus = {IdealNodeCount}", idealNumberOfNodes);
@@ -145,53 +141,16 @@ namespace AppGWBEHealthVMSS
                 else
                 {
                     scaleDownRequests.Clear();
-                    log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                    VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, log);
+                    if (scaleup)
+                    {
+                        log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
+                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, log);
+                    }
+                    else
+                    {
+                        log.LogInformation("** Not performing scale up operations as scaleup == false");
+                    }
                 }
-                /*
-                // we need to deploy new nodes to bring the healthy node count up close to the desired count
-                var newNodes = idealNumberOfNodes - logicalHealthyNodeCount;
-                log.LogInformation("Calculated new nodes needed = {NewNodeCount}", newNodes);
-                if (newNodes == 0)
-                {
-                    log.LogInformation("No new nodes needed");
-                }
-                // if we are over the threshold then scale up
-                else if (newNodes > 0)
-                {
-                    // scale up by either the newnode count or the default
-                    // because we only want to scale by the max number at a time
-                    var scaleNodeCount = Math.Min(newNodes, scaleByNodeCount);
-                    doRemainder = newNodes > scaleByNodeCount;
-                    log.LogInformation($"Scale Event Initiated scaling up by {scaleNodeCount} nodes. DoRemainder: {doRemainder} NewNodes: {newNodes}");
-                    VmScaleSetOperations.ScaleEvent(scaleSet, scaleNodeCount, log);
-                }
-                else if (healthyNodeCount >= idealNumberOfNodes)
-                {
-                    log.LogInformation("Scaling Down");
-                    // Scale down slower than scale up (half the rate)
-                    VmScaleSetOperations.CoolDownEvent(scaleSet, scaleByNodeCount / 2, minHealthyServers, log);
-                }
-                else
-                {
-                    log.LogInformation("Scaling skipped due to healthy node count");
-                }*/
-                //if (healthyNodeCount == 0)
-                //{
-                //    if (deployingNodes >= minHealthyServers)
-                //    {
-                //        log.LogInformation("No healthy nodes found, {deployingNodesCount} nodes are already deploying, skipping scale up", deployingNodes);
-                //    }
-                //    else
-                //    {
-                //        log.LogInformation("No healthy nodes found, scaling up");
-                //        VmScaleSetOperations.ScaleEvent(scaleSet, minHealthyServers, log);
-                //    }
-                //}
-                //else
-                //{
-
-                //}
             }
             catch (Exception e)
             {

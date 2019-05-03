@@ -111,17 +111,20 @@ namespace AppGWBEHealthVMSS.shared
                     log.LogInformation($"Scale up request too large, capacity={scaleSet.Capacity}, request = {scaleNodeCount}, scaling by {maxScaleUpCount} only");
                     scaleNodeCount = scaleSet.Capacity + maxScaleUpCount;
                 }
-                if (scaleSet.Inner.Sku.Capacity != scaleNodeCount)
-                {
-                    log.LogInformation($"Setting Capacity to {scaleNodeCount}");
-                    scaleSet.Inner.Sku.Capacity = scaleNodeCount;
-                    return scaleSet.Update().ApplyAsync();
-                }
-                else
-                {
-                    log.LogInformation($"Not setting capacity of scaleset since it is already desired number({scaleNodeCount})");
-                    return Task.CompletedTask;
-                }
+                log.LogInformation($"Setting Capacity to {scaleNodeCount}");
+                scaleSet.Inner.Sku.Capacity = scaleNodeCount;
+                return scaleSet.Update().ApplyAsync();
+                //if (scaleSet.Inner.Sku.Capacity != scaleNodeCount)
+                //{
+                //    log.LogInformation($"Setting Capacity to {scaleNodeCount}");
+                //    scaleSet.Inner.Sku.Capacity = scaleNodeCount;
+                //    return scaleSet.Update().ApplyAsync();
+                //}
+                //else
+                //{
+                //    log.LogInformation($"Not setting capacity of scaleset since it is already desired number({scaleNodeCount})");
+                //    return Task.CompletedTask;
+                //}
             }
             catch (Exception e)
             {
