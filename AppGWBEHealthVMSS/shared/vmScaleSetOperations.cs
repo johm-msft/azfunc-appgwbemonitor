@@ -94,6 +94,43 @@ namespace AppGWBEHealthVMSS.shared
             }
         }
 
+
+        public static Task ScaleToTargetSize(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, int maxScaleUpCount, ILogger log)
+        {
+            try
+            {
+                var maxNodes = 100;
+                if (scaleNodeCount > maxNodes)
+                {
+                    log.LogInformation($"Scale requested to {scaleNodeCount} which is larger than max ({maxNodes})");
+                    scaleNodeCount = maxNodes;
+                }
+                // if we are asking to scale up by more than max
+                if (scaleNodeCount - scaleSet.Capacity > maxScaleUpCount)
+                {
+                    log.LogInformation($"Scale up request too large, capacity={scaleSet.Capacity}, request = {scaleNodeCount}, scaling by {maxScaleUpCount} only");
+                    scaleNodeCount = scaleSet.Capacity + maxScaleUpCount;
+                }
+                if (scaleSet.Inner.Sku.Capacity != scaleNodeCount)
+                {
+                    log.LogInformation($"Setting Capacity to {scaleNodeCount}");
+                    scaleSet.Inner.Sku.Capacity = scaleNodeCount;
+                    return scaleSet.Update().ApplyAsync();
+                }
+                else
+                {
+                    log.LogInformation($"Not setting capacity of scaleset since it is already desired number({scaleNodeCount})");
+                    return Task.CompletedTask;
+                }
+            }
+            catch (Exception e)
+            {
+                log.LogInformation("Error Message: " + e.Message);
+                throw;
+            }
+        }
+
+
         /// <summary>
         /// Scale down the pool by a hueristic amount of nodes
         /// </summary>
@@ -103,6 +140,7 @@ namespace AppGWBEHealthVMSS.shared
         /// <param name="log">Log.</param>
         public static void CoolDownEvent(IVirtualMachineScaleSet scaleSet, int maxNumberOfNodesToScaleBy, int minHealthyNodes, ILogger log)
         {
+            log.LogInformation($"Cooling down");
             try
             {
                 // don't be super agressive, assume min bound is base + scale factor
@@ -111,7 +149,7 @@ namespace AppGWBEHealthVMSS.shared
                 var targetNodeCount = minHealthyNodes;
 
                 var currentVmCount = (int)scaleSet.Inner.Sku.Capacity;
-
+                log.LogInformation($"CurrentVMCount: {currentVmCount} BaseSteadyState: {baseSteadyStateCount} MinHealthy: {minHealthyNodes} ");
                 // if we are below min + scale factor then go down by 1 at a time
                 if (currentVmCount <= baseSteadyStateCount)
                 {
@@ -122,6 +160,7 @@ namespace AppGWBEHealthVMSS.shared
                 {
                     targetNodeCount = Math.Max(currentVmCount - maxNumberOfNodesToScaleBy, baseSteadyStateCount);
                 }
+                log.LogInformation($"Target Node: {targetNodeCount}");
 
                 if (targetNodeCount < minHealthyNodes)
                 {

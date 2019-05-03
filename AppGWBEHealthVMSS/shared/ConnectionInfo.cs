@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace AppGWBEHealthVMSS.shared
 {
     public class ConnectionInfo
@@ -7,9 +10,28 @@ namespace AppGWBEHealthVMSS.shared
         public int? TotalRequests { get; set; }
         public int? ResponseStatus { get; set; }
 
-        public override string ToString() 
+        public List<double?> HistoricalConcurrentConnections { get; set; }
+        public List<double?> HistoricalTotalRequests { get; set; }
+        public List<double?> HistoricalResponseStatus { get; set; }
+
+        public ConnectionInfo()
+        {
+            HistoricalConcurrentConnections = new List<double?>();
+            HistoricalTotalRequests = new List<double?>();
+            HistoricalResponseStatus = new List<double?>();
+        }
+
+        public override string ToString()
         {
             return $"ConnectionInfo: CurrentConnections={CurrentConnections}, TotalRequests={TotalRequests}, ResponseStatus={ResponseStatus}";
+        }
+
+        public string GetHistoryAsString()
+        {
+            return $@"History: 
+                ConcurrentConnections : {string.Join(",", HistoricalConcurrentConnections.Select(v => v.HasValue ? v.Value.ToString("N1") : "null"))}
+                TotalRequests : {string.Join(",", HistoricalTotalRequests.Select(v => v.HasValue ? v.Value.ToString("N1") : "null"))}
+                ResponseStatus : {string.Join(",", HistoricalResponseStatus.Select(v => v.HasValue ? v.Value.ToString("N1") : "null"))} ";
         }
     }
 }

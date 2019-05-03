@@ -21,7 +21,7 @@ namespace AppGWBEHealthVMSS
 {
     public static class AppGWBEHealth
     {
-        [FunctionName("AppGWBEHealthProbe")]
+        //[FunctionName("AppGWBEHealthProbe")]
         public static void Run([TimerTrigger("0 * * * * *")]TimerInfo myTimer, ILogger log)
         {
             string clientID = Utils.GetEnvVariableOrDefault("clientID");
