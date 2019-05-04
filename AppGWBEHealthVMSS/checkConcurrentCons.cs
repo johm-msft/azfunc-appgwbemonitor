@@ -20,7 +20,7 @@ namespace AppGWBEHealthVMSS
 
         static bool doRemainder = false;
         [FunctionName("checkConcurrentCons")]
-        public static void Run([TimerTrigger("0/30 * * * * *")]TimerInfo myTimer, ILogger log)
+        public static void Run([TimerTrigger("*/45 * * * * *")]TimerInfo myTimer, ILogger log)
         {
             log.LogInformation("Main Timer");
             doCheck(log);
