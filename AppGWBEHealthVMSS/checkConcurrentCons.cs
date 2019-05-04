@@ -32,10 +32,6 @@ namespace AppGWBEHealthVMSS
             {
                 sw = Stopwatch.StartNew();
             }
-            // clean up every 4 time, scale every 2 times
-            bool cleanup = runCount % 4 == 0;
-            bool scaleup = runCount % 2 == 0;
-            runCount++;
 
             string clientID = Utils.GetEnvVariableOrDefault("clientID");
             string clientSecret = Utils.GetEnvVariableOrDefault("clientSecret");
@@ -49,6 +45,13 @@ namespace AppGWBEHealthVMSS
             int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
             int maxScaleUpUnit = Utils.GetEnvVariableOrDefault("_scaleByNodeCount", 10);
             bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("_fakeMode", "false"));
+            int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 4);
+            int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 2);
+
+            // clean up every 4 time, scale every 2 times
+            bool cleanup = runCount % cleanUpEvery == 0;
+            bool scaleup = runCount % scaleUpEvery == 0;
+            runCount++;
 
             try
             {
@@ -69,6 +72,10 @@ namespace AppGWBEHealthVMSS
                     //// Remove any bad nodes first
                     ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
                     log.LogInformation($"Scaleset size AFTER checking for bad nodes is {scaleSet.Capacity}");
+                }
+                else
+                {
+                    log.LogInformation("Not running cleanup this pass since cleanup == false");
                 }
 
                 var healthyUnhealthyCounts = ApplicationGatewayOperations.GetHealthyAndUnhealthyNodeCounts(appGwBEHealth, log);
