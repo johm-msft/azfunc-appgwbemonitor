@@ -20,7 +20,7 @@ namespace AppGWBEHealthVMSS
 
         static bool doRemainder = false;
         [FunctionName("checkConcurrentCons")]
-        public static void Run([TimerTrigger("0 * * * * *")]TimerInfo myTimer, ILogger log)
+        public static void Run([TimerTrigger("0/30 * * * * *")]TimerInfo myTimer, ILogger log)
         {
             log.LogInformation("Main Timer");
             doCheck(log);
@@ -45,8 +45,8 @@ namespace AppGWBEHealthVMSS
             int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
             int maxScaleUpUnit = Utils.GetEnvVariableOrDefault("_scaleByNodeCount", 10);
             bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("_fakeMode", "false"));
-            int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 4);
-            int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 2);
+            int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 8);
+            int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
 
             // clean up every 4 time, scale every 2 times
             bool cleanup = runCount % cleanUpEvery == 0;
