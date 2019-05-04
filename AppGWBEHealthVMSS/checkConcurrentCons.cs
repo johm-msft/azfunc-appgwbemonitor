@@ -122,7 +122,8 @@ namespace AppGWBEHealthVMSS
                 //TODO: Add logic if ResponseStatus and TotalRequests are out of sync just ignore it for now 'cause AppGW has crazy metrics
 
                 //
-                double rps = Math.Max(connectionInfo.ResponseStatus.Value, connectionInfo.TotalRequests ?? 0) / 60.0;
+                //double rps = Math.Max(connectionInfo.ResponseStatus.Value, connectionInfo.TotalRequests ?? 0) / 60.0;
+                double rps = connectionInfo.ResponseStatus.Value / 60.0;
                 log.LogInformation($"ResponseStatus: { connectionInfo.ResponseStatus.Value } Total Requests: {connectionInfo.TotalRequests ?? 0} RPS: {rps}");
 
                 double idealNumberOfNodes = Math.Max(rps / maxConcurrentConnectionsPerNode, minHealthyServers);
