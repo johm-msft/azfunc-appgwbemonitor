@@ -29,9 +29,9 @@ namespace AppGWBEHealthVMSS.shared
         public string GetHistoryAsString()
         {
             return $@"History: 
-                ConcurrentConnections : {string.Join(",", HistoricalConcurrentConnections.Select(v => v.HasValue ? v.Value.ToString("N1") : "null"))}
-                TotalRequests : {string.Join(",", HistoricalTotalRequests.Select(v => v.HasValue ? v.Value.ToString("N1") : "null"))}
-                ResponseStatus : {string.Join(",", HistoricalResponseStatus.Select(v => v.HasValue ? v.Value.ToString("N1") : "null"))} ";
+                ConcurrentConnections : {string.Join(",", HistoricalConcurrentConnections.Select(v => v.HasValue ? v.Value.ToString() : "null"))}
+                TotalRequests : {string.Join(",", HistoricalTotalRequests.Select(v => v.HasValue ? v.Value.ToString() : "null"))}
+                ResponseStatus : {string.Join(",", HistoricalResponseStatus.Select(v => v.HasValue ? v.Value.ToString() : "null"))} ";
         }
     }
 }
