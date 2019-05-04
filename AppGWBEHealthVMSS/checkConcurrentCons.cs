@@ -16,11 +16,12 @@ namespace AppGWBEHealthVMSS
     {
         public static Stopwatch sw = null;
         public static int runCount = 0;
+        public static int scheduleCount = 0;
         private static List<int> scaleDownRequests = new List<int>();
 
         static bool doRemainder = false;
         [FunctionName("checkConcurrentCons")]
-        public static void Run([TimerTrigger("*/45 * * * * *")]TimerInfo myTimer, ILogger log)
+        public static void Run([TimerTrigger("*/15 * * * * *")]TimerInfo myTimer, ILogger log)
         {
             log.LogInformation("Main Timer");
             doCheck(log);
@@ -47,6 +48,15 @@ namespace AppGWBEHealthVMSS
             bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("_fakeMode", "false"));
             int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 8);
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
+            int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
+
+
+            //  we run every 15 seconds, if we want to run every 45 seconds we only do it every 3 times
+            if (scheduleCount++ % scheduleToRunFactor != 0)
+            {
+                log.LogInformation("skipping due to scheduleToRunFactor");
+                return;
+            }
 
             // clean up every 4 time, scale every 2 times
             bool cleanup = runCount % cleanUpEvery == 0;
@@ -119,11 +129,19 @@ namespace AppGWBEHealthVMSS
                     return;
                 }
                 // get per second data from minute granularity
-                //TODO: Add logic if ResponseStatus and TotalRequests are out of sync just ignore it for now 'cause AppGW has crazy metrics
 
-                //
-                //double rps = Math.Max(connectionInfo.ResponseStatus.Value, connectionInfo.TotalRequests ?? 0) / 60.0;
-                double rps = connectionInfo.ResponseStatus.Value / 60.0;
+
+                double rps;
+                if ((connectionInfo.CurrentConnections ?? 0) > 8)
+                {
+                    log.LogInformation("Computing rps using MAX(TotalRequests,ResponseStatus)");
+                    rps = Math.Max(connectionInfo.ResponseStatus.Value, connectionInfo.TotalRequests ?? 0) / 60.0;
+                }
+                else
+                {
+                    log.LogInformation("Computing rps using ResponseStatus only");
+                    rps = connectionInfo.ResponseStatus.Value / 60.0;
+                }
                 log.LogInformation($"ResponseStatus: { connectionInfo.ResponseStatus.Value } Total Requests: {connectionInfo.TotalRequests ?? 0} RPS: {rps}");
 
                 double idealNumberOfNodes = Math.Max(rps / maxConcurrentConnectionsPerNode, minHealthyServers);

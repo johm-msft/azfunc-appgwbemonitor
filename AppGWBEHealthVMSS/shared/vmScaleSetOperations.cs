@@ -17,12 +17,23 @@ namespace AppGWBEHealthVMSS.shared
 {
     class VmScaleSetOperations
     {
+        /// <summary>
+        /// The ids of vms we have tried to delete recently
+        /// </summary>
+        private static Dictionary<string, DateTime> RecentPendingVMDeleteOperations = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
         public static Task RemoveVMSSInstanceByID(IVirtualMachineScaleSet scaleSet, List<string> serverIPs, ILogger log)
         {
             try
             {
-                // TODO: would be nice to pass a flag to this function saying only delete unhealthy nodes that
-                // have been up for > 30 seconds or something to allow them to start and be recognized
+                // first a bit of cleanup, remove all super old pending delete info to prevent leakage
+                foreach (var k in RecentPendingVMDeleteOperations.Keys.ToList())
+                {
+                    if (RecentPendingVMDeleteOperations[k] < DateTime.UtcNow - TimeSpan.FromMinutes(20))
+                    {
+                        log.LogInformation($"Cleaning up old pending delete info for vm {k}");
+                    }
+                }
                 log.LogInformation("Enumerating VM Instances in ScaleSet");
                 var vms = scaleSet.VirtualMachines.List().ToList();
                 // only consider nodes which have been prtovisioned completely for removal
@@ -50,9 +61,35 @@ namespace AppGWBEHealthVMSS.shared
 
                 if (badInstances.Count() != 0)
                 {
-                    string[] badInstancesArray = badInstances.ToArray();
+                    var instancesToDelete = new List<string>();
                     log.LogInformation("Removing Bad Instances");
-                    return scaleSet.VirtualMachines.DeleteInstancesAsync(badInstancesArray);
+                    foreach (var badVm in badInstances)
+                    {
+                        if (RecentPendingVMDeleteOperations.ContainsKey(badVm))
+                        {
+                            // we have asked for this vm to be deleted before, if it's more than 10 mins ago
+                            // then try again otherwise skip it
+                            if (DateTime.UtcNow - RecentPendingVMDeleteOperations[badVm] < TimeSpan.FromMinutes(10))
+                            {
+                                log.LogInformation($"*** Instance {badVm} has recent delete request ({RecentPendingVMDeleteOperations[badVm]}), skipping deletion");
+                            }
+                            else
+                            {
+                                // we should delete it and update the timestamp
+                                instancesToDelete.Add(badVm);
+                               
+                            }
+                        }
+                        else
+                        {
+                            instancesToDelete.Add(badVm);
+                        }
+                    }
+                    foreach (var v in instancesToDelete)
+                    {
+                        RecentPendingVMDeleteOperations[v] = DateTime.UtcNow;
+                    }
+                    return scaleSet.VirtualMachines.DeleteInstancesAsync(instancesToDelete.ToArray());
                 }
                 else
                 {
@@ -185,9 +222,5 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation("Error Message: " + e.Message);
             }
         }
-
-
-
-
     }
 }
