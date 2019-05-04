@@ -32,8 +32,8 @@ namespace AppGWBEHealthVMSS
             {
                 sw = Stopwatch.StartNew();
             }
-            // do full run every 3 times
-            bool cleanup = runCount % 3 == 0;
+            // clean up every 4 time, scale every 2 times
+            bool cleanup = runCount % 4 == 0;
             bool scaleup = runCount % 2 == 0;
             runCount++;
 
