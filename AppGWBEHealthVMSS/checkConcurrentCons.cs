@@ -17,6 +17,7 @@ namespace AppGWBEHealthVMSS
         public static Stopwatch sw = null;
         public static int runCount = 0;
         public static int scheduleCount = 0;
+        private static bool checkedOverProvisioningStatus = false;
         private static List<int> scaleDownRequests = new List<int>();
 
         [FunctionName("checkConcurrentCons")]
@@ -73,6 +74,15 @@ namespace AppGWBEHealthVMSS
                 var azClient = AzureClient.CreateAzureClient(clientID, clientSecret, tenantID, azEnvironment, subscriptionID);
                 var scaleSet = azClient.VirtualMachineScaleSets.GetByResourceGroup(resourcegroupname, scaleSetName);
                 var appGw = azClient.ApplicationGateways.GetByResourceGroup(resourcegroupname, appGwName);
+
+                // Avoid extra api calls by checking this only once and setting flag once we have checked.
+                if (!checkedOverProvisioningStatus && scaleSet.OverProvisionEnabled)
+                {
+                    log.LogInformation("Overprovisioning is ON, turning it off");
+                    scaleSet.Inner.Overprovision = false;
+                    scaleSet.Update().ApplyAsync();
+                    checkedOverProvisioningStatus = true;
+                }
 
                 log.LogInformation($"Got AppGateway: {appGw.Id}");
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
