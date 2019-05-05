@@ -45,6 +45,7 @@ namespace AppGWBEHealthVMSS
             int minHealthyServers = Utils.GetEnvVariableOrDefault("_minHealthyServers", 3);
             int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
             int maxScaleUpUnit = Utils.GetEnvVariableOrDefault("_scaleByNodeCount", 10);
+            int maxActiveServers = Utils.GetEnvVariableOrDefault("_maxActiveServers", 100);
             bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("_fakeMode", "false"));
             int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 8);
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
@@ -159,7 +160,7 @@ namespace AppGWBEHealthVMSS
                         log.LogInformation($"Scaling down due to repeated requests, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))}, avg = {scaleDownRequests.Average()}");
                         idealNodes = (int)scaleDownRequests.Average();
                         log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, false, deletedNodes, log);
+                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, false, deletedNodes, log);
                     }
                     else
                     {
@@ -172,7 +173,7 @@ namespace AppGWBEHealthVMSS
                     if (scaleup)
                     {
                         log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, scaleUpQuickly, deletedNodes, log);
+                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, scaleUpQuickly, deletedNodes, log);
                     }
                     else
                     {
