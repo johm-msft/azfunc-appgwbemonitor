@@ -43,7 +43,7 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation($"{virtualmachines.Count} machines of {vms.Count} are completely provisioned, checking those for unhealthy nodes");
 
                 List<string> badInstances = new List<string>();
-              
+
                 foreach (var vm in virtualmachines)
                 {
                     try
@@ -54,7 +54,7 @@ namespace AppGWBEHealthVMSS.shared
                             badInstances.Add(vm.InstanceId);
                         }
                     }
-                    catch(Exception)
+                    catch (Exception)
                     {
                         log.LogError($"Error reading ip config by vm id {vm.Id}");
                     }
@@ -78,7 +78,7 @@ namespace AppGWBEHealthVMSS.shared
                             {
                                 // we should delete it and update the timestamp
                                 instancesToDelete.Add(badVm);
-                               
+
                             }
                         }
                         else
@@ -105,40 +105,12 @@ namespace AppGWBEHealthVMSS.shared
             }
         }
 
-        public static Task ScaleEvent(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, ILogger log)
-        {
-            try
-            {
-                var vms = scaleSet.VirtualMachines.List().ToList();
-                int scaler = vms.Count() + scaleNodeCount;
-                var maxNodes = 100;// hard code to 100 TODO: make configurable
-                //var maxNodes = scaleSet.Inner.SinglePlacementGroup ?? true ? 100 : 1000;
 
-                if (scaler > maxNodes)
-                {
-                    log.LogInformation("Scale request for ScaleSet {Scaleset} to {RequestedScale} nodes exceeeds limit, scaling to max allowed({MaxScale})",
-                        scaleSet.Name, scaler, maxNodes);
-                    scaler = maxNodes;
-                }
-
-                log.LogInformation("Scale Event in ScaleSet {0} to {1} nodes", scaleSet.Name, scaler);
-                scaleSet.Inner.Sku.Capacity = scaler;
-                return scaleSet.Update().ApplyAsync();
-            }
-            catch (Exception e)
-            {
-                log.LogInformation("Error Message: " + e.Message);
-                throw;
-            }
-        }
-
-
-        public static Task ScaleToTargetSize(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, int maxScaleUpCount, bool scaleUpQuickly, bool deletedNodes, ILogger log)
+        public static Task ScaleToTargetSize(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, int maxScaleUpCount, int maxNodes, bool scaleUpQuickly, bool deletedNodes, ILogger log)
         {
             List<Task> pendingTasks = new List<Task>();
             try
             {
-                var maxNodes = 100;
                 if (scaleNodeCount > maxNodes)
                 {
                     log.LogInformation($"Scale requested to {scaleNodeCount} which is larger than max ({maxNodes})");

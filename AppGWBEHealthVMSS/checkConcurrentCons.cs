@@ -44,6 +44,7 @@ namespace AppGWBEHealthVMSS
             int minHealthyServers = Utils.GetEnvVariableOrDefault("_minHealthyServers", 3);
             int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
             int maxScaleUpUnit = Utils.GetEnvVariableOrDefault("_scaleByNodeCount", 10);
+            int maxActiveServers = Utils.GetEnvVariableOrDefault("_maxActiveServers", 100);
             bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("_fakeMode", "false"));
             int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 8);
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
@@ -183,6 +184,7 @@ namespace AppGWBEHealthVMSS
 
                     var allAutoScaleRules = azClient.AutoscaleSettings.ListByResourceGroup(scaleSet.ResourceGroupName);
                     foreach (var curScaleRule in allAutoScaleRules)
+
                     {
                         log.LogInformation($"Found autoscale settings found for resource : {curScaleRule.Id} : enabled = {curScaleRule.AutoscaleEnabled} ");
                         if (curScaleRule.TargetResourceId == scaleSet.Id)
@@ -212,18 +214,9 @@ namespace AppGWBEHealthVMSS
                     int idealNodes = (int)Math.Ceiling(idealNumberOfNodes);
                     if (idealNumberOfNodes < scaleSet.Capacity)
                     {
-                        scaleDownRequests.Add(idealNodes);
-                        if (scaleDownRequests.Count > 3)
-                        {
-                            log.LogInformation($"Scaling down due to repeated requests, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))}, avg = {scaleDownRequests.Average()}");
-                            idealNodes = (int)scaleDownRequests.Average();
-                            log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                            VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, false, deletedNodes, log);
-                        }
-                        else
-                        {
-                            log.LogInformation($"Scale down request received, total requests {scaleDownRequests.Count}, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))} not scaling yet");
-                        }
+
+                        log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
+                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, scaleUpQuickly, deletedNodes, log);
                     }
                     else
                     {
