@@ -51,7 +51,7 @@ namespace AppGWBEHealthVMSS
             bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
             bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "true"));
             bool logCustomMetricsVerboseLogging = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetricsVerboseLogging", "false"));
-
+            string allowedMetricRegions = Utils.GetEnvVariableOrDefault("allowedCustomMetricRegions", "eastus,southcentralus,westcentralus,westus2,southeastasia,northeurope,westeurope");
             //  we run every 15 seconds, if we want to run every 45 seconds we only do it every 3 times
             if (scheduleCount++ % scheduleToRunFactor != 0)
             {
@@ -149,45 +149,94 @@ namespace AppGWBEHealthVMSS
                 double idealNumberOfNodes = Math.Max(rps / maxConcurrentConnectionsPerNode, minHealthyServers);
                 log.LogInformation("Ideal Node Count based on ResponseStatus = {IdealNodeCount}", idealNumberOfNodes);
 
-                if (logCustomMetrics)
+                //TODO: add check if we're in a region that can accept custom metrics
+                try
                 {
-                    log.LogInformation("Logging Custom Metrics");
-                    metricJSONGenerator.populateCustomMetric("RPS", rps.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
-                    metricJSONGenerator.populateCustomMetric("IdealNodeCount", idealNumberOfNodes.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
-                    metricJSONGenerator.populateCustomMetric("MaxConcurrentConnectionsPerNode", maxConcurrentConnectionsPerNode.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
-                }
-                else
-                {
-                    log.LogInformation($"Skipping logging Custom Metrics per appSetting");
-                }
-                // If we will scale down, hold off unless we get a consistent message to do that
-                int idealNodes = (int)Math.Ceiling(idealNumberOfNodes);
-                if (idealNumberOfNodes < scaleSet.Capacity)
-                {
-                    scaleDownRequests.Add(idealNodes);
-                    if (scaleDownRequests.Count > 3)
+                    if (logCustomMetrics)
                     {
-                        log.LogInformation($"Scaling down due to repeated requests, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))}, avg = {scaleDownRequests.Average()}");
-                        idealNodes = (int)scaleDownRequests.Average();
-                        log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, false, deletedNodes, log);
+                        if (allowedMetricRegions.Split(",").Contains(scaleSet.RegionName))
+                        {
+                            log.LogInformation("Logging Custom Metrics");
+                            metricJSONGenerator.populateCustomMetric("RPS", rps.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                            metricJSONGenerator.populateCustomMetric("IdealNodeCount", idealNumberOfNodes.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                            metricJSONGenerator.populateCustomMetric("MaxConcurrentConnectionsPerNode", maxConcurrentConnectionsPerNode.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                        }
+                        else
+                        {
+                            log.LogInformation("Skipping custom metric population, as we're not in a region that supports it (defined in appSetting)");
+                        }
                     }
                     else
                     {
-                        log.LogInformation($"Scale down request received, total requests {scaleDownRequests.Count}, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))} not scaling yet");
+                        log.LogInformation($"Skipping logging Custom Metrics per appSetting");
                     }
+                }
+                catch(Exception customLoggingError)
+                {
+                    log.LogInformation($"Error with custom metric population - continuing anyway as this was Plan B {customLoggingError}");
+                }
+                //Add check if autoscale configured - if so, don't custom scale
+                bool scaleSetAutoScaleRuleIsEnabled = false;
+                try
+                {
+                    log.LogInformation($"Looking for existing enabled autoscale rules so we don't step on them w/ custom scaling in the function");
+
+                    var allAutoScaleRules = azClient.AutoscaleSettings.ListByResourceGroup(scaleSet.ResourceGroupName);
+                    foreach (var curScaleRule in allAutoScaleRules)
+                    {
+                        log.LogInformation($"Found autoscale settings found for resource : {curScaleRule.Id} : enabled = {curScaleRule.AutoscaleEnabled} ");
+                        if (curScaleRule.TargetResourceId == scaleSet.Id)
+                        {
+
+                            if (curScaleRule.AutoscaleEnabled)
+                            {
+                                log.LogInformation($"Noting we have a scaleset rule in place for our VMSS. ");
+                                scaleSetAutoScaleRuleIsEnabled = true;
+
+                            }
+                        }
+                    }
+                }
+                catch(Exception errGettingAutoScale)
+                {
+                    log.LogInformation($"No autoscale settings found for ScaleSet: {scaleSet.Name}: {errGettingAutoScale.Message} ");
+                }
+                if (scaleSetAutoScaleRuleIsEnabled)
+                {
+                    log.LogInformation("Because we have an autoscale rule in place, don't do custom scaling");
+                    return;
                 }
                 else
                 {
-                    scaleDownRequests.Clear();
-                    if (scaleup)
+                    // If we will scale down, hold off unless we get a consistent message to do that
+                    int idealNodes = (int)Math.Ceiling(idealNumberOfNodes);
+                    if (idealNumberOfNodes < scaleSet.Capacity)
                     {
-                        log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, scaleUpQuickly, deletedNodes, log);
+                        scaleDownRequests.Add(idealNodes);
+                        if (scaleDownRequests.Count > 3)
+                        {
+                            log.LogInformation($"Scaling down due to repeated requests, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))}, avg = {scaleDownRequests.Average()}");
+                            idealNodes = (int)scaleDownRequests.Average();
+                            log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
+                            VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, false, deletedNodes, log);
+                        }
+                        else
+                        {
+                            log.LogInformation($"Scale down request received, total requests {scaleDownRequests.Count}, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))} not scaling yet");
+                        }
                     }
                     else
                     {
-                        log.LogInformation("** Not performing scale up operations as scaleup == false");
+                        scaleDownRequests.Clear();
+                        if (scaleup)
+                        {
+                            log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
+                            VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, scaleUpQuickly, deletedNodes, log);
+                        }
+                        else
+                        {
+                            log.LogInformation("** Not performing scale up operations as scaleup == false");
+                        }
                     }
                 }
             }
