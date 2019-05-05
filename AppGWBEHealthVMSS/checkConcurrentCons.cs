@@ -49,6 +49,7 @@ namespace AppGWBEHealthVMSS
             int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 8);
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
             int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
+            bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
 
 
             //  we run every 15 seconds, if we want to run every 45 seconds we only do it every 3 times
@@ -62,6 +63,7 @@ namespace AppGWBEHealthVMSS
             bool cleanup = runCount % cleanUpEvery == 0;
             bool scaleup = runCount % scaleUpEvery == 0;
             runCount++;
+            bool deletedNodes = false;
 
             try
             {
@@ -80,7 +82,7 @@ namespace AppGWBEHealthVMSS
                 {
                     log.LogInformation($"Scaleset size BEFORE checking for bad nodes is {scaleSet.Capacity}");
                     //// Remove any bad nodes first
-                    ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
+                    deletedNodes = ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
                     log.LogInformation($"Scaleset size AFTER checking for bad nodes is {scaleSet.Capacity}");
                 }
                 else
@@ -157,7 +159,7 @@ namespace AppGWBEHealthVMSS
                         log.LogInformation($"Scaling down due to repeated requests, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))}, avg = {scaleDownRequests.Average()}");
                         idealNodes = (int)scaleDownRequests.Average();
                         log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, log);
+                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, false, deletedNodes, log);
                     }
                     else
                     {
@@ -170,7 +172,7 @@ namespace AppGWBEHealthVMSS
                     if (scaleup)
                     {
                         log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, log);
+                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, scaleUpQuickly, deletedNodes, log);
                     }
                     else
                     {

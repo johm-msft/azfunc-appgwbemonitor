@@ -12,6 +12,7 @@ using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
 using Microsoft.Azure.Management.Fluent;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace AppGWBEHealthVMSS.shared
 {
@@ -132,8 +133,9 @@ namespace AppGWBEHealthVMSS.shared
         }
 
 
-        public static Task ScaleToTargetSize(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, int maxScaleUpCount, ILogger log)
+        public static Task ScaleToTargetSize(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, int maxScaleUpCount, bool scaleUpQuickly, bool deletedNodes, ILogger log)
         {
+            List<Task> pendingTasks = new List<Task>();
             try
             {
                 var maxNodes = 100;
@@ -142,26 +144,49 @@ namespace AppGWBEHealthVMSS.shared
                     log.LogInformation($"Scale requested to {scaleNodeCount} which is larger than max ({maxNodes})");
                     scaleNodeCount = maxNodes;
                 }
-                // if we are asking to scale up by more than max
-                if (scaleNodeCount - scaleSet.Capacity > maxScaleUpCount)
+                if (scaleNodeCount > scaleSet.Capacity && scaleUpQuickly)
                 {
-                    log.LogInformation($"Scale up request too large, capacity={scaleSet.Capacity}, request = {scaleNodeCount}, scaling by {maxScaleUpCount} only");
-                    scaleNodeCount = scaleSet.Capacity + maxScaleUpCount;
+                    log.LogInformation("*** Scale up quickly mode enabled...");
+                    // we are scaling up and want to go a fast as possible so scale by chunks
+                    // of maxScaleUpCount at a time until we reach the target
+                    var currentTarget = Math.Min(scaleSet.Capacity + maxScaleUpCount, scaleNodeCount);
+
+                    do
+                    {
+                        log.LogInformation($"Scale quicly mode: Scaling to {currentTarget}");
+                        scaleSet.Inner.Sku.Capacity = currentTarget;
+                        pendingTasks.Add(scaleSet.Update().ApplyAsync());
+                        if (currentTarget == scaleNodeCount)
+                        {
+                            break;
+                        }
+                        // sleep for a little bit rather than requesting again immediately
+                        log.LogInformation($"Sleeping 5 seconds...");
+                        Thread.Sleep(TimeSpan.FromSeconds(5));
+                        currentTarget = Math.Min(currentTarget + maxScaleUpCount, scaleNodeCount);
+                    } while (currentTarget <= scaleNodeCount);
+                    return Task.WhenAll(pendingTasks);
                 }
-                log.LogInformation($"Setting Capacity to {scaleNodeCount}");
-                scaleSet.Inner.Sku.Capacity = scaleNodeCount;
-                return scaleSet.Update().ApplyAsync();
-                //if (scaleSet.Inner.Sku.Capacity != scaleNodeCount)
-                //{
-                //    log.LogInformation($"Setting Capacity to {scaleNodeCount}");
-                //    scaleSet.Inner.Sku.Capacity = scaleNodeCount;
-                //    return scaleSet.Update().ApplyAsync();
-                //}
-                //else
-                //{
-                //    log.LogInformation($"Not setting capacity of scaleset since it is already desired number({scaleNodeCount})");
-                //    return Task.CompletedTask;
-                //}
+                else
+                {
+                    // if we are asking to scale up by more than max
+                    if (scaleNodeCount - scaleSet.Capacity > maxScaleUpCount)
+                    {
+                        log.LogInformation($"Scale up request too large, capacity={scaleSet.Capacity}, request = {scaleNodeCount}, scaling by {maxScaleUpCount} only");
+                        scaleNodeCount = scaleSet.Capacity + maxScaleUpCount;
+                    }
+                    if (!deletedNodes && scaleSet.Capacity == scaleNodeCount)
+                    {
+                        log.LogInformation("Not setting scaleset size as we didn't delete any nodes this time and capacity matches");
+                        return Task.CompletedTask;
+                    }
+                    else
+                    {
+                        log.LogInformation($"Setting Capacity to {scaleNodeCount}");
+                        scaleSet.Inner.Sku.Capacity = scaleNodeCount;
+                        return scaleSet.Update().ApplyAsync();
+                    }
+                }
             }
             catch (Exception e)
             {
