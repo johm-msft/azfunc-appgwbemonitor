@@ -150,7 +150,7 @@ namespace AppGWBEHealthVMSS
                 double idealNumberOfNodes = Math.Max(rps / maxConcurrentConnectionsPerNode, minHealthyServers);
                 log.LogInformation("Ideal Node Count based on ResponseStatus = {IdealNodeCount}", idealNumberOfNodes);
 
-                //TODO: add check if we're in a region that can accept custom metrics
+                //Check if we're in a region that can accept custom metrics
                 try
                 {
                     if (logCustomMetrics)
