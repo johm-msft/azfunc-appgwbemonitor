@@ -19,7 +19,6 @@ namespace AppGWBEHealthVMSS
         public static int scheduleCount = 0;
         private static List<int> scaleDownRequests = new List<int>();
 
-        static bool doRemainder = false;
         [FunctionName("checkConcurrentCons")]
         public static void Run([TimerTrigger("*/15 * * * * *")]TimerInfo myTimer, ILogger log)
         {
@@ -50,7 +49,8 @@ namespace AppGWBEHealthVMSS
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
             int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
             bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
-
+            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "true"));
+            bool logCustomMetricsVerboseLogging = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetricsVerboseLogging", "false"));
 
             //  we run every 15 seconds, if we want to run every 45 seconds we only do it every 3 times
             if (scheduleCount++ % scheduleToRunFactor != 0)
@@ -149,6 +149,17 @@ namespace AppGWBEHealthVMSS
                 double idealNumberOfNodes = Math.Max(rps / maxConcurrentConnectionsPerNode, minHealthyServers);
                 log.LogInformation("Ideal Node Count based on ResponseStatus = {IdealNodeCount}", idealNumberOfNodes);
 
+                if (logCustomMetrics)
+                {
+                    log.LogInformation("Logging Custom Metrics");
+                    metricJSONGenerator.populateCustomMetric("RPS", rps.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                    metricJSONGenerator.populateCustomMetric("IdealNodeCount", idealNumberOfNodes.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                    metricJSONGenerator.populateCustomMetric("MaxConcurrentConnectionsPerNode", maxConcurrentConnectionsPerNode.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                }
+                else
+                {
+                    log.LogInformation($"Skipping logging Custom Metrics per appSetting");
+                }
                 // If we will scale down, hold off unless we get a consistent message to do that
                 int idealNodes = (int)Math.Ceiling(idealNumberOfNodes);
                 if (idealNumberOfNodes < scaleSet.Capacity)
@@ -182,7 +193,6 @@ namespace AppGWBEHealthVMSS
             }
             catch (Exception e)
             {
-                doRemainder = false;
                 log.LogError(e, e.ToString());
             }
             
