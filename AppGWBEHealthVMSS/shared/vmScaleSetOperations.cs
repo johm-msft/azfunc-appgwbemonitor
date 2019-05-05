@@ -108,6 +108,7 @@ namespace AppGWBEHealthVMSS.shared
 
         public static Task ScaleToTargetSize(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, int maxScaleUpCount, int maxNodes, bool scaleUpQuickly, bool deletedNodes, ILogger log)
         {
+            log.LogInformation($"ScaleToTargetSize scaleNodeCount {scaleNodeCount}, max {maxScaleUpCount}, maxNodes {maxNodes}, scaleUpQuickly {scaleUpQuickly}, deletedNodes {deletedNodes}");
             List<Task> pendingTasks = new List<Task>();
             try
             {
@@ -154,7 +155,7 @@ namespace AppGWBEHealthVMSS.shared
                     }
                     else
                     {
-                        log.LogInformation($"Setting Capacity to {scaleNodeCount}");
+                        log.LogInformation($"Changing Capacity from {scaleSet.Capacity} to {scaleNodeCount}");
                         scaleSet.Inner.Sku.Capacity = scaleNodeCount;
                         return scaleSet.Update().ApplyAsync();
                     }
