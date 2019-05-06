@@ -3,6 +3,12 @@ namespace AppGWBEHealthVMSS.shared
 {
     public static class Utils
     {
+        /// <summary>
+        /// Gets the env variable or default.
+        /// </summary>
+        /// <returns>The env variable or default.</returns>
+        /// <param name="name">Name.</param>
+        /// <param name="defaultValue">Default value.</param>
         public static int GetEnvVariableOrDefault(string name, int defaultValue)
         {
             var val = System.Environment.GetEnvironmentVariable(name);
@@ -16,6 +22,12 @@ namespace AppGWBEHealthVMSS.shared
             }
         }
 
+        /// <summary>
+        /// Gets the env variable or default.
+        /// </summary>
+        /// <returns>The env variable or default.</returns>
+        /// <param name="name">Name.</param>
+        /// <param name="defaultValue">Default value.</param>
         public static string GetEnvVariableOrDefault(string name, string defaultValue = null)
         {
             var val = System.Environment.GetEnvironmentVariable(name);

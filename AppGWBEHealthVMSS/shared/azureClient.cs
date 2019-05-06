@@ -8,8 +8,20 @@ using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
 
 namespace AppGWBEHealthVMSS.shared
 {
+    /// <summary>
+    /// Azure client.
+    /// </summary>
     class AzureClient
     {
+        /// <summary>
+        /// Creates the azure client.
+        /// </summary>
+        /// <returns>The azure client.</returns>
+        /// <param name="clientID">Client identifier.</param>
+        /// <param name="clientSecret">Client secret.</param>
+        /// <param name="tenantID">Tenant identifier.</param>
+        /// <param name="azEnvironment">Az environment.</param>
+        /// <param name="subscriptionID">Subscription identifier.</param>
         public static IAzure CreateAzureClient(string clientID, string clientSecret, string tenantID, AzureEnvironment azEnvironment, string subscriptionID)
         {
                       

@@ -12,6 +12,11 @@ using System.Collections.Generic;
 
 namespace AppGWBEHealthVMSS
 {
+    /// <summary>
+    /// Class containing function to run hosted in AzureFunctions to monitor the
+    /// resource group and perform scale operations as needed (delete nodes, 
+    /// scale up, scale down etc).
+    /// </summary>
     public static class CheckConcurrentCons
     {
         public static Stopwatch sw = null;
@@ -20,20 +25,32 @@ namespace AppGWBEHealthVMSS
         private static bool checkedOverProvisioningStatus = false;
         private static List<int> scaleDownRequests = new List<int>();
 
+        /// <summary>
+        /// The function which fires on a timer to run the scale operations.
+        /// </summary>
+        /// <param name="myTimer">My timer.</param>
+        /// <param name="log">Log.</param>
         [FunctionName("checkConcurrentCons")]
         public static void Run([TimerTrigger("*/15 * * * * *")]TimerInfo myTimer, ILogger log)
         {
             log.LogInformation("Main Timer");
-            doCheck(log);
+            DoCheck(log);
         }
 
-        public static void doCheck(ILogger log)
+        /// <summary>
+        /// Performs the checks and scale/delete operations.
+        /// </summary>
+        /// <param name="log">Log.</param>
+        public static void DoCheck(ILogger log)
         { 
+            // on first run we start a stopwatch to track how long into it we
+            // are (this is only used for fake load mode which is for testing)
             if (sw == null)
             {
                 sw = Stopwatch.StartNew();
             }
-
+            // Read all the settings from the environment with sensible defaults
+            // where applicable
             string clientID = Utils.GetEnvVariableOrDefault("clientID");
             string clientSecret = Utils.GetEnvVariableOrDefault("clientSecret");
             string tenantID = Utils.GetEnvVariableOrDefault("tenantID", "a8175357-a762-478b-b724-6c2bd3f3f45e");
@@ -51,17 +68,19 @@ namespace AppGWBEHealthVMSS
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
             int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
             bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
-            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "true"));
+            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "false"));
             bool logCustomMetricsVerboseLogging = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetricsVerboseLogging", "false"));
 
-            //  we run every 15 seconds, if we want to run every 45 seconds we only do it every 3 times
+            // To get around CRON syntax limitations we can't actually run every 45 seconds
+            // instead we get scheduled every 15 seconds and only actually run
+            // every 3 times.
             if (scheduleCount++ % scheduleToRunFactor != 0)
             {
                 log.LogInformation("skipping due to scheduleToRunFactor");
                 return;
             }
 
-            // clean up every 4 time, scale every 2 times
+            // clean up every {cleanUpEvery} times, scale every {scaleUpEvery} times
             bool cleanup = runCount % cleanUpEvery == 0;
             bool scaleup = runCount % scaleUpEvery == 0;
             runCount++;
@@ -75,12 +94,14 @@ namespace AppGWBEHealthVMSS
                 var scaleSet = azClient.VirtualMachineScaleSets.GetByResourceGroup(resourcegroupname, scaleSetName);
                 var appGw = azClient.ApplicationGateways.GetByResourceGroup(resourcegroupname, appGwName);
 
+
+                // We want to make sure that overprovisioning if OFF on the scaleset
+                // since we are creating and deleting vms very often it makes sense to 
+                // get the exact counts.
                 // Avoid extra api calls by checking this only once and setting flag once we have checked.
-                if (!checkedOverProvisioningStatus && scaleSet.OverProvisionEnabled)
+                if (!checkedOverProvisioningStatus)
                 {
-                    log.LogInformation("Overprovisioning is ON, turning it off");
-                    scaleSet.Inner.Overprovision = false;
-                    scaleSet.Update().ApplyAsync();
+                    VmScaleSetOperations.DisableOverProvisioning(scaleSet, log);
                     checkedOverProvisioningStatus = true;
                 }
 
@@ -109,11 +130,11 @@ namespace AppGWBEHealthVMSS
                 ConnectionInfo connectionInfo;
                 if (fakeMode)
                 {
-                    connectionInfo = ApplicationGatewayOperations.GetFakeConcurrentConnectionCountAppGW(appGw, azClient, (int)sw.Elapsed.TotalSeconds, log);
+                    connectionInfo = ApplicationGatewayOperations.GetFakeConnectionMetrics(appGw, azClient, (int)sw.Elapsed.TotalSeconds, log);
                 }
                 else
                 {
-                    connectionInfo = ApplicationGatewayOperations.GetConcurrentConnectionCountAppGW(appGw, azClient, log);
+                    connectionInfo = ApplicationGatewayOperations.GetConnectionMetrics(appGw, azClient, log);
                 }
                 log.LogInformation(connectionInfo.ToString());
                 log.LogInformation(connectionInfo.GetHistoryAsString());

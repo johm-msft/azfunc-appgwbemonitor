@@ -10,8 +10,6 @@ namespace AppGWBEHealthVMSS
 {
     static class metricJSONGenerator
     {
-
-
         static int metricCount = 1;
         private static string authToken = null;
         private static DateTimeOffset authTokenLifetime;
