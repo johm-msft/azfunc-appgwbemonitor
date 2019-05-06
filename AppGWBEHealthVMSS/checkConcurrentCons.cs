@@ -50,7 +50,7 @@ namespace AppGWBEHealthVMSS
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
             int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
             bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
-            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "false"));
+            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "true"));
             bool logCustomMetricsVerboseLogging = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetricsVerboseLogging", "false"));
             string allowedMetricRegions = Utils.GetEnvVariableOrDefault("allowedCustomMetricRegions", "eastus,southcentralus,westcentralus,westus2,southeastasia,northeurope,westeurope");
             //  we run every 15 seconds, if we want to run every 45 seconds we only do it every 3 times
