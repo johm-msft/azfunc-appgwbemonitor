@@ -50,7 +50,7 @@ namespace AppGWBEHealthVMSS
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
             int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
             bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
-            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "true"));
+            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "false"));
             bool logCustomMetricsVerboseLogging = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetricsVerboseLogging", "false"));
             string allowedMetricRegions = Utils.GetEnvVariableOrDefault("allowedCustomMetricRegions", "eastus,southcentralus,westcentralus,westus2,southeastasia,northeurope,westeurope");
             //  we run every 15 seconds, if we want to run every 45 seconds we only do it every 3 times
@@ -76,8 +76,7 @@ namespace AppGWBEHealthVMSS
 
                 log.LogInformation($"Got AppGateway: {appGw.Id}");
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
-                // EXPERIMENT, removing nodes here rather than in other function
-
+               
                 // Only run deletes every now and again
                 if (cleanup)
                 {
@@ -155,7 +154,7 @@ namespace AppGWBEHealthVMSS
                 {
                     if (logCustomMetrics)
                     {
-                        if (allowedMetricRegions.Split(",").Contains(scaleSet.RegionName))
+                        if (allowedMetricRegions.Split(",").Contains(scaleSet.RegionName, StringComparer.InvariantCultureIgnoreCase))
                         {
                             log.LogInformation("Logging Custom Metrics");
                             metricJSONGenerator.populateCustomMetric("RPS", rps.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
@@ -174,40 +173,14 @@ namespace AppGWBEHealthVMSS
                 }
                 catch (Exception customLoggingError)
                 {
-                    log.LogInformation($"Error with custom metric population - continuing anyway as this was Plan B {customLoggingError}");
+                    log.LogError(customLoggingError, $"Error with custom metric population");
                 }
 
-                //Add check if autoscale configured - if so, don't custom scale
-                bool scaleSetAutoScaleRuleIsEnabled = false;
-                try
+            
+                if(logCustomMetrics)
                 {
-
-                    log.LogInformation($"Looking for existing enabled autoscale rules so we don't step on them w/ custom scaling in the function");
-
-                    var allAutoScaleRules = azClient.AutoscaleSettings.ListByResourceGroup(scaleSet.ResourceGroupName);
-                    foreach (var curScaleRule in allAutoScaleRules)
-                    {
-                        log.LogInformation($"Found autoscale settings found for resource : {curScaleRule.Id} : enabled = {curScaleRule.AutoscaleEnabled} ");
-                        if (curScaleRule.TargetResourceId == scaleSet.Id)
-                        {
-
-                            if (curScaleRule.AutoscaleEnabled)
-                            {
-                                log.LogInformation($"Noting we have a scaleset rule in place for our VMSS. ");
-                                scaleSetAutoScaleRuleIsEnabled = true;
-
-                            }
-                        }
-                    }
-                }
-                catch (Exception errGettingAutoScale)
-                {
-                    log.LogInformation($"No autoscale settings found for ScaleSet: {scaleSet.Name}: {errGettingAutoScale.Message} ");
-                }
-                if (scaleSetAutoScaleRuleIsEnabled)
-                {
-                    log.LogInformation("Because we have an autoscale rule in place, don't do custom scaling");
-                    return;
+                    log.LogInformation("Because we are using custom metrics, don't do scaling ourselves");
+                   
                 }
                 else
                 {
