@@ -2,30 +2,33 @@
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.Azure.Management.ResourceManager.Fluent;
 using Microsoft.Azure.Management.Network.Fluent;
 using Microsoft.Azure.Management.Network.Fluent.Models;
 using Microsoft.Azure.Management.Fluent;
 using Microsoft.Azure.Management.Compute.Fluent;
-using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
 
 namespace AppGWBEHealthVMSS.shared
 {
+    /// <summary>
+    /// Helper class for performing operations on AppGateway
+    /// </summary>
     class ApplicationGatewayOperations
     {
-
+        /// <summary>
+        /// Checks the application gateway back end health metrics and deletes bad nodes
+        /// </summary>
+        /// <returns><c>true</c>, if we deleted nodes, <c>false</c> otherwise.</returns>
+        /// <param name="appGw">App gateway</param>
+        /// <param name="scaleSet">Scale set.</param>
+        /// <param name="minHealthyServers">Minimum healthy servers.</param>
+        /// <param name="log">Log.</param>
         public static bool CheckApplicationGatewayBEHealthAndDeleteBadNodes(ApplicationGatewayBackendHealthInner appGw, IVirtualMachineScaleSet scaleSet, int minHealthyServers, ILogger log)
         {
             try
             {
                 log.LogInformation("Enumerating Application Gateway Backend Unhealthy Servers");
-                 var healthy = new List<ApplicationGatewayBackendHealthServer>();
+                var healthy = new List<ApplicationGatewayBackendHealthServer>();
                 var unhealthy = new List<ApplicationGatewayBackendHealthServer>();
                 foreach (var server in appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers)
                 {
@@ -41,11 +44,11 @@ namespace AppGWBEHealthVMSS.shared
      
                 List<string> appGwBadIps = new List<string>();
 
+                // If we have unhealthy nodes, then delete them
                 if (unhealthy.Count > 0)
                 {
                     log.LogInformation("Unhealthy node count = {0}, removing nodes", unhealthy.Count);
-                    VmScaleSetOperations.RemoveVMSSInstanceByID(scaleSet, unhealthy.Select(s => s.Address).ToList(), log).ContinueWith(t => log.LogInformation("Delete VMs complete"));
-                    return true; // we removed nodes
+                    return VmScaleSetOperations.RemoveVMSSInstancesByIP(scaleSet, unhealthy.Select(s => s.Address).ToList(), log);
                 }
                 return false;
             }
@@ -56,10 +59,17 @@ namespace AppGWBEHealthVMSS.shared
                 log.LogInformation("InnerException:" + e.InnerException);
                 return false;
             }
-
         }
 
-        public static ConnectionInfo GetFakeConcurrentConnectionCountAppGW(IApplicationGateway appGW, IAzure azureClient, int secondsIn, ILogger log)
+        /// <summary>
+        /// Gets current load metrics based on the scenario description.
+        /// </summary>
+        /// <returns>The fake concurrent connection count app gw.</returns>
+        /// <param name="appGW">App gw.</param>
+        /// <param name="azureClient">Azure client.</param>
+        /// <param name="secondsIn">Seconds in.</param>
+        /// <param name="log">Log.</param>
+        public static ConnectionInfo GetFakeConnectionMetrics(IApplicationGateway appGW, IAzure azureClient, int secondsIn, ILogger log)
         {
             ConnectionInfo ret = new ConnectionInfo();
             // try to mimic the load profile we are trying to get to.
@@ -130,7 +140,14 @@ namespace AppGWBEHealthVMSS.shared
             return ret;
         }
 
-            public static ConnectionInfo GetConcurrentConnectionCountAppGW(IApplicationGateway appGW, IAzure azureClient, ILogger log)
+        /// <summary>
+        /// Gets the concurrent connection count app gw.
+        /// </summary>
+        /// <returns>The concurrent connection count app gw.</returns>
+        /// <param name="appGW">App gw.</param>
+        /// <param name="azureClient">Azure client.</param>
+        /// <param name="log">Log.</param>
+        public static ConnectionInfo GetConnectionMetrics(IApplicationGateway appGW, IAzure azureClient, ILogger log)
         {
             try
             {
@@ -200,13 +217,18 @@ namespace AppGWBEHealthVMSS.shared
             }
             catch (Exception e)
             {
-                
                 log.LogError(e, "Error Getting metrics: " + e.ToString());
                 throw;
             }
             
         }
 
+        /// <summary>
+        /// Gets the healthy and unhealthy node counts.
+        /// </summary>
+        /// <returns>The healthy and unhealthy node counts.</returns>
+        /// <param name="appGw">App gw.</param>
+        /// <param name="log">Log.</param>
         public static Tuple<int, int> GetHealthyAndUnhealthyNodeCounts(ApplicationGatewayBackendHealthInner appGw, ILogger log)
         {
             var healthy = 0;

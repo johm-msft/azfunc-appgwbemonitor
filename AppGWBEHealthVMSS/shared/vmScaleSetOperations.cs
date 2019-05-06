@@ -23,7 +23,15 @@ namespace AppGWBEHealthVMSS.shared
         /// </summary>
         private static Dictionary<string, DateTime> RecentPendingVMDeleteOperations = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
 
-        public static Task RemoveVMSSInstanceByID(IVirtualMachineScaleSet scaleSet, List<string> serverIPs, ILogger log)
+        /// <summary>
+        /// Removes VMSS instances based on the ip addresses reported by backend
+        /// IP Address.
+        /// </summary>
+        /// <returns>completion task.</returns>
+        /// <param name="scaleSet">Scale set.</param>
+        /// <param name="serverIPs">Server IPs</param>
+        /// <param name="log">Log.</param>
+        public static bool RemoveVMSSInstancesByIP(IVirtualMachineScaleSet scaleSet, List<string> serverIPs, ILogger log)
         {
             try
             {
@@ -78,7 +86,6 @@ namespace AppGWBEHealthVMSS.shared
                             {
                                 // we should delete it and update the timestamp
                                 instancesToDelete.Add(badVm);
-
                             }
                         }
                         else
@@ -90,12 +97,20 @@ namespace AppGWBEHealthVMSS.shared
                     {
                         RecentPendingVMDeleteOperations[v] = DateTime.UtcNow;
                     }
-                    return scaleSet.VirtualMachines.DeleteInstancesAsync(instancesToDelete.ToArray());
+                    if (instancesToDelete.Any())
+                    {
+                        scaleSet.VirtualMachines.DeleteInstancesAsync(instancesToDelete.ToArray());
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
                 }
                 else
                 {
                     log.LogInformation("No Running nodes detected to remove, likely because they are already deleting");
-                    return Task.CompletedTask;
+                    return false;
                 }
             }
             catch (Exception e)
@@ -105,7 +120,18 @@ namespace AppGWBEHealthVMSS.shared
             }
         }
 
-
+        /// <summary>
+        /// Scales the scaleset to the target size (taking into account scaling
+        /// limits)
+        /// </summary>
+        /// <returns>The to target size.</returns>
+        /// <param name="scaleSet">Scale set.</param>
+        /// <param name="scaleNodeCount">Scale node count.</param>
+        /// <param name="maxScaleUpCount">Max scale up count.</param>
+        /// <param name="maxNodes">Max nodes.</param>
+        /// <param name="scaleUpQuickly">If set to <c>true</c> scale up quickly.</param>
+        /// <param name="deletedNodes">If set to <c>true</c>, we deleted nodes in this pass.</param>
+        /// <param name="log">Log.</param>
         public static Task ScaleToTargetSize(IVirtualMachineScaleSet scaleSet, int scaleNodeCount, int maxScaleUpCount, int maxNodes, bool scaleUpQuickly, bool deletedNodes, ILogger log)
         {
             log.LogInformation($"ScaleToTargetSize scaleNodeCount {scaleNodeCount}, max {maxScaleUpCount}, maxNodes {maxNodes}, scaleUpQuickly {scaleUpQuickly}, deletedNodes {deletedNodes}");
@@ -119,14 +145,13 @@ namespace AppGWBEHealthVMSS.shared
                 }
                 if (scaleNodeCount > scaleSet.Capacity && scaleUpQuickly)
                 {
-                    log.LogInformation("*** Scale up quickly mode enabled...");
                     // we are scaling up and want to go a fast as possible so scale by chunks
                     // of maxScaleUpCount at a time until we reach the target
                     var currentTarget = Math.Min(scaleSet.Capacity + maxScaleUpCount, scaleNodeCount);
 
                     do
                     {
-                        log.LogInformation($"Scale quicly mode: Scaling to {currentTarget}");
+                        log.LogInformation($"Scale quickly mode: Scaling to {currentTarget}");
                         scaleSet.Inner.Sku.Capacity = currentTarget;
                         pendingTasks.Add(scaleSet.Update().ApplyAsync());
                         if (currentTarget == scaleNodeCount)
@@ -142,7 +167,8 @@ namespace AppGWBEHealthVMSS.shared
                 }
                 else
                 {
-                    // if we are asking to scale up by more than max
+                    // If we are scaling up in slow mode and asking to scale up by more than max
+                    // only scale by max nodes.
                     if (scaleNodeCount - scaleSet.Capacity > maxScaleUpCount)
                     {
                         log.LogInformation($"Scale up request too large, capacity={scaleSet.Capacity}, request = {scaleNodeCount}, scaling by {maxScaleUpCount} only");
@@ -150,7 +176,7 @@ namespace AppGWBEHealthVMSS.shared
                     }
                     if (!deletedNodes && scaleSet.Capacity == scaleNodeCount)
                     {
-                        log.LogInformation("Not setting scaleset size as we didn't delete any nodes this time and capacity matches");
+                        log.LogInformation("**** Not setting scaleset size as we didn't delete any nodes this time and capacity matches");
                         return Task.CompletedTask;
                     }
                     else
@@ -168,57 +194,21 @@ namespace AppGWBEHealthVMSS.shared
             }
         }
 
-
         /// <summary>
-        /// Scale down the pool by a hueristic amount of nodes
+        /// Disables the over provisioning for the scale set.
         /// </summary>
+        /// <returns>The over provisioning.</returns>
         /// <param name="scaleSet">Scale set.</param>
-        /// <param name="maxNumberOfNodesToScaleBy">Max number of nodes to scale by.</param>
-        /// <param name="minHealthyNodes">Minimum healthy nodes.</param>
         /// <param name="log">Log.</param>
-        public static void CoolDownEvent(IVirtualMachineScaleSet scaleSet, int maxNumberOfNodesToScaleBy, int minHealthyNodes, ILogger log)
+        public static Task DisableOverProvisioning(IVirtualMachineScaleSet scaleSet, ILogger log)
         {
-            log.LogInformation($"Cooling down");
-            try
+            if (scaleSet.OverProvisionEnabled)
             {
-                // don't be super agressive, assume min bound is base + scale factor
-                int baseSteadyStateCount = maxNumberOfNodesToScaleBy + minHealthyNodes;
-
-                var targetNodeCount = minHealthyNodes;
-
-                var currentVmCount = (int)scaleSet.Inner.Sku.Capacity;
-                log.LogInformation($"CurrentVMCount: {currentVmCount} BaseSteadyState: {baseSteadyStateCount} MinHealthy: {minHealthyNodes} ");
-                // if we are below min + scale factor then go down by 1 at a time
-                if (currentVmCount <= baseSteadyStateCount)
-                {
-                    // just scale down by one node
-                    targetNodeCount = currentVmCount - 1;
-                }
-                else
-                {
-                    targetNodeCount = Math.Max(currentVmCount - maxNumberOfNodesToScaleBy, baseSteadyStateCount);
-                }
-                log.LogInformation($"Target Node: {targetNodeCount}");
-
-                if (targetNodeCount < minHealthyNodes)
-                {
-                    targetNodeCount = minHealthyNodes;
-                }
-                if (scaleSet.Inner.Sku.Capacity > targetNodeCount)
-                {
-                    log.LogInformation("Scale Down Event in ScaleSet {0} Scaling down to {1} nodes ", scaleSet.Name, targetNodeCount);
-                    scaleSet.Inner.Sku.Capacity = targetNodeCount;
-                    scaleSet.Update().ApplyAsync();
-                }
-                else
-                {
-                    log.LogInformation("No need to scale down, already at target count ({count})", targetNodeCount);
-                }
+                log.LogInformation("Overprovisioning is ON, turning it off");
+                scaleSet.Inner.Overprovision = false;
+                return scaleSet.Update().ApplyAsync();
             }
-            catch (Exception e)
-            {
-                log.LogInformation("Error Message: " + e.Message);
-            }
+            return Task.CompletedTask;
         }
     }
 }
