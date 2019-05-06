@@ -71,6 +71,7 @@ namespace AppGWBEHealthVMSS
                 log.LogInformation("Creating Azure Client for checkConcurrentCons Function");
                 var azEnvironment = AzureEnvironment.AzureGlobalCloud;
                 var azClient = AzureClient.CreateAzureClient(clientID, clientSecret, tenantID, azEnvironment, subscriptionID);
+
                 var scaleSet = azClient.VirtualMachineScaleSets.GetByResourceGroup(resourcegroupname, scaleSetName);
                 var appGw = azClient.ApplicationGateways.GetByResourceGroup(resourcegroupname, appGwName);
 
@@ -107,7 +108,18 @@ namespace AppGWBEHealthVMSS
                 }
                 log.LogInformation(connectionInfo.ToString());
                 log.LogInformation(connectionInfo.GetHistoryAsString());
-                var vmsByState = scaleSet.VirtualMachines.List().ToList().GroupBy(v => v.Inner.ProvisioningState).ToDictionary(gdc => gdc.Key, gdc => gdc.ToList());
+                int deployingNodes = 0; 
+                var vmsByState = scaleSet.VirtualMachines.List().ToList();
+                foreach(var curVM in vmsByState)
+                {
+                    var curProvisioningState = curVM.Inner.ProvisioningState;
+                    if (curProvisioningState == "Creating" || curProvisioningState == "Updating")
+                    {
+                        deployingNodes++;
+                    }
+
+                }
+/*                .GroupBy(v => v.Inner.ProvisioningState).ToDictionary(gdc => gdc.Key, gdc => gdc.ToList());
                 StringBuilder sb = new StringBuilder();
                 var deployingNodes = 0;
                 foreach (var k in vmsByState.Keys)
@@ -118,7 +130,7 @@ namespace AppGWBEHealthVMSS
                         deployingNodes += vmsByState[k].Count;
                     }
                 }
-                log.LogInformation($"Vm counts by state : {sb.ToString()}");
+                log.LogInformation($"Vm counts by state : {sb.ToString()}");*/
                 // get the count of nodes which are deploying (will soon be online)
 
                 log.LogInformation("Considering {0} of these deploying", deployingNodes);
@@ -155,7 +167,7 @@ namespace AppGWBEHealthVMSS
                 {
                     if (logCustomMetrics)
                     {
-                        if (allowedMetricRegions.Split(",").Contains(scaleSet.RegionName))
+                        if (allowedMetricRegions.Split(",").Contains(scaleSet.RegionName,StringComparer.OrdinalIgnoreCase))
                         {
                             log.LogInformation("Logging Custom Metrics");
                             metricJSONGenerator.populateCustomMetric("RPS", rps.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
