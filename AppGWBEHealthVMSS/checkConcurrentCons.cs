@@ -203,6 +203,8 @@ namespace AppGWBEHealthVMSS
                         idealNodes = (int)scaleDownRequests.Average();
                         log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
                         VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, false, deletedNodes, log);
+                        // wipe out the list
+                        scaleDownRequests.Clear();
                     }
                     else
                     {
