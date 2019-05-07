@@ -110,25 +110,19 @@ namespace AppGWBEHealthVMSS
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
 
                 // Only run deletes every now and again
-                // If we have a problem during cleaning, eat the error as we want to continue scaling
-                try
+                
+                if (cleanup)
                 {
-                    if (cleanup)
-                    {
-                        log.LogInformation($"Scaleset size BEFORE checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
-                        //// Remove any bad nodes first
-                        deletedNodes = ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
-                        log.LogInformation($"Scaleset size AFTER checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
-                    }
-                    else
-                    {
-                        log.LogInformation("Not running cleanup this pass since cleanup == false");
-                    }
+                    log.LogInformation($"Scaleset size BEFORE checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
+                    //// Remove any bad nodes first
+                    deletedNodes = ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
+                    log.LogInformation($"Scaleset size AFTER checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
                 }
-                catch (Exception cleaningError)
+                else
                 {
-                    log.LogError(cleaningError, "Error during cleaning - eat the error and continue scaling");
+                    log.LogInformation("Not running cleanup this pass since cleanup == false");
                 }
+                
                 var healthyUnhealthyCounts = ApplicationGatewayOperations.GetHealthyAndUnhealthyNodeCounts(appGwBEHealth, log);
                 var healthyNodeCount = healthyUnhealthyCounts.Item1;
                 var unhealthyNodeCount = healthyUnhealthyCounts.Item2;
