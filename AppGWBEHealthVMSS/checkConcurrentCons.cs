@@ -126,7 +126,7 @@ namespace AppGWBEHealthVMSS
                 var healthyNodeCount = healthyUnhealthyCounts.Item1;
                 var unhealthyNodeCount = healthyUnhealthyCounts.Item2;
                 var totalNodeCount = healthyNodeCount + unhealthyNodeCount;
-                log.LogInformation("Detected {TotalNodes} nodes, {HealthyNodes} are healthy, {UnhealthyNodes} are unhealthy", totalNodeCount, healthyNodeCount, unhealthyNodeCount);
+                log.LogInformation("Detected {TotalNodes} nodes, {HealthyNodes} are healthy, {UnhealthyNodes} are unhealthy (creating & deleting)", totalNodeCount, healthyNodeCount, unhealthyNodeCount);
                 ConnectionInfo connectionInfo;
                 if (fakeMode)
                 {
