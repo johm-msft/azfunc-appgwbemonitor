@@ -16,7 +16,7 @@ namespace AppGWBEHealthVMSS.shared
     class ApplicationGatewayOperations
     {
         /// <summary>
-        /// Checks the application gateway back end health metrics and deletes bad nodes
+        /// Checks the application gateway back end health metrics and deletes Gobibear Intentional Panic nodes
         /// </summary>
         /// <returns><c>true</c>, if we deleted nodes, <c>false</c> otherwise.</returns>
         /// <param name="appGw">App gateway</param>
