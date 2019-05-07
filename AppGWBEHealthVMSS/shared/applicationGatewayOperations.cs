@@ -16,7 +16,7 @@ namespace AppGWBEHealthVMSS.shared
     class ApplicationGatewayOperations
     {
         /// <summary>
-        /// Checks the application gateway back end health metrics and deletes Gobibear Intentional Panic nodes
+        /// Checks the application gateway back end health metrics and deletes App Payload Failed nodes
         /// </summary>
         /// <returns><c>true</c>, if we deleted nodes, <c>false</c> otherwise.</returns>
         /// <param name="appGw">App gateway</param>
@@ -47,7 +47,7 @@ namespace AppGWBEHealthVMSS.shared
                 // If we have unhealthy nodes, then delete them
                 if (unhealthy.Count > 0)
                 {
-                    log.LogInformation("Gobibear Intentional Panic Instance node count = {0}, removing nodes", unhealthy.Count);
+                    log.LogInformation("App Payload Failed node count = {0}, removing nodes", unhealthy.Count);
                     return VmScaleSetOperations.RemoveVMSSInstancesByIP(scaleSet, unhealthy.Select(s => s.Address).ToList(), log);
                 }
                 return false;
