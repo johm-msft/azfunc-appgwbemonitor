@@ -16,7 +16,7 @@ namespace AppGWBEHealthVMSS.shared
     class ApplicationGatewayOperations
     {
         /// <summary>
-        /// Checks the application gateway back end health metrics and deletes bad nodes
+        /// Checks the application gateway back end health metrics and deletes Gobibear Intentional Panic nodes
         /// </summary>
         /// <returns><c>true</c>, if we deleted nodes, <c>false</c> otherwise.</returns>
         /// <param name="appGw">App gateway</param>
@@ -27,7 +27,7 @@ namespace AppGWBEHealthVMSS.shared
         {
             try
             {
-                log.LogInformation("Enumerating Application Gateway Backend Unhealthy Servers");
+                log.LogInformation("Enumerating Application Gateway Backend Servers");
                 var healthy = new List<ApplicationGatewayBackendHealthServer>();
                 var unhealthy = new List<ApplicationGatewayBackendHealthServer>();
                 foreach (var server in appGw.BackendAddressPools[0].BackendHttpSettingsCollection[0].Servers)
@@ -47,7 +47,7 @@ namespace AppGWBEHealthVMSS.shared
                 // If we have unhealthy nodes, then delete them
                 if (unhealthy.Count > 0)
                 {
-                    log.LogInformation("Unhealthy node count = {0}, removing nodes", unhealthy.Count);
+                    log.LogInformation("Gobibear Intentional Panic Instance node count = {0}, removing nodes", unhealthy.Count);
                     return VmScaleSetOperations.RemoveVMSSInstancesByIP(scaleSet, unhealthy.Select(s => s.Address).ToList(), log);
                 }
                 return false;
@@ -62,7 +62,7 @@ namespace AppGWBEHealthVMSS.shared
         }
 
         /// <summary>
-        /// Gets current load metrics based on the scenario description.
+        /// Gets current load metrics based on the scenario description. Used for simulation during development
         /// </summary>
         /// <returns>The fake concurrent connection count app gw.</returns>
         /// <param name="appGW">App gw.</param>
@@ -207,12 +207,12 @@ namespace AppGWBEHealthVMSS.shared
                 }
 
                 //DEBUG LOGGING
-                Console.WriteLine("Metrics:");
+                /*Console.WriteLine("Metrics:");
                 foreach (var x in metricsByName.Keys)
                 {
                     Console.WriteLine($"{x} : {string.Join(",",metricsByName[x])}");
                 }
-
+                */
                 return ret;
             }
             catch (Exception e)

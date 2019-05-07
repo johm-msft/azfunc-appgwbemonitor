@@ -48,7 +48,7 @@ namespace AppGWBEHealthVMSS.shared
                 // only consider nodes which have been prtovisioned completely for removal
                 var virtualmachines = vms.Where(x => x.Inner.ProvisioningState == "Succeeded").ToList();
 
-                log.LogInformation($"{virtualmachines.Count} machines of {vms.Count} are completely provisioned, checking those for unhealthy nodes");
+                log.LogInformation($"{virtualmachines.Count} machines of {vms.Count} are completely provisioned, checking those for Gobibear Intentional Panic Instances nodes");
 
                 List<string> badInstances = new List<string>();
 
@@ -58,20 +58,20 @@ namespace AppGWBEHealthVMSS.shared
                     {
                         if (serverIPs.Contains(vm.ListNetworkInterfaces().First().Inner.IpConfigurations.First().PrivateIPAddress))
                         {
-                            log.LogInformation("Bad Instance detected: {0}", vm.InstanceId);
+                            log.LogInformation("Gobibear Intentional Panic Instance detected: {0}", vm.InstanceId);
                             badInstances.Add(vm.InstanceId);
                         }
                     }
                     catch (Exception)
                     {
-                        log.LogError($"Error reading ip config by vm id {vm.Id}");
+                        log.LogError($"Error reading ip config by VM ID {vm.Id}");
                     }
                 }
 
                 if (badInstances.Count() != 0)
                 {
                     var instancesToDelete = new List<string>();
-                    log.LogInformation("Removing Bad Instances");
+                    log.LogInformation("Removing Gobibear Intentional Panic Instances");
                     foreach (var badVm in badInstances)
                     {
                         if (RecentPendingVMDeleteOperations.ContainsKey(badVm))
