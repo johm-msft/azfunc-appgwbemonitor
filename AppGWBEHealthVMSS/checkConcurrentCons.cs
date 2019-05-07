@@ -60,11 +60,12 @@ namespace AppGWBEHealthVMSS
             string appGwName = Utils.GetEnvVariableOrDefault("_appGwName", "gobibearappGw");
             string scaleSetName = Utils.GetEnvVariableOrDefault("_scaleSetName", "gobibear");
             int minHealthyServers = Utils.GetEnvVariableOrDefault("_minHealthyServers", 3);
+            int healthBuffer = Utils.GetEnvVariableOrDefault("_healthBuffer", 3);
             int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
             int maxScaleUpUnit = Utils.GetEnvVariableOrDefault("_scaleByNodeCount", 10);
             int maxActiveServers = Utils.GetEnvVariableOrDefault("_maxActiveServers", 100);
             bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("_fakeMode", "false"));
-            int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 8);
+            int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 4);
             int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
             int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
             bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
@@ -162,66 +163,67 @@ namespace AppGWBEHealthVMSS
                     log.LogError("ResponseStatus information missing cannot make a decision on what to do");
                     return;
                 }
-                // get per second data from minute granularity
-
 
                 double rps;
-                if ((connectionInfo.CurrentConnections ?? 0) > 8)
-                {
-                    log.LogInformation("Computing rps using MAX(TotalRequests,ResponseStatus)");
-                    rps = Math.Max(connectionInfo.ResponseStatus.Value, connectionInfo.TotalRequests ?? 0) / 60.0;
-                }
-                else
-                {
-                    log.LogInformation("Computing rps using ResponseStatus only");
-                    rps = connectionInfo.ResponseStatus.Value / 60.0;
-                }
+
+                log.LogInformation("Computing rps using ResponseStatus only");
+                rps = connectionInfo.ResponseStatus.Value / 60.0;
                 log.LogInformation($"ResponseStatus: { connectionInfo.ResponseStatus.Value } Total Requests: {connectionInfo.TotalRequests ?? 0} RPS: {rps}");
 
                 double idealNumberOfNodes = Math.Max(rps / maxConcurrentConnectionsPerNode, minHealthyServers);
                 log.LogInformation("Ideal Node Count based on ResponseStatus = {IdealNodeCount}", idealNumberOfNodes);
 
-                if (logCustomMetrics)
+                // Sanity check that the number makes sense
+                if (idealNumberOfNodes > 160)
                 {
-                    log.LogInformation("Logging Custom Metrics");
-                    metricJSONGenerator.populateCustomMetric("RPS", rps.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
-                    metricJSONGenerator.populateCustomMetric("IdealNodeCount", idealNumberOfNodes.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
-                    metricJSONGenerator.populateCustomMetric("MaxConcurrentConnectionsPerNode", maxConcurrentConnectionsPerNode.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                    log.LogInformation("Ideal Node Count looks incorrect, possibly due to bogus metrics ({IdealNodeCount}), IGNORING SCALE EVENT", idealNumberOfNodes);
                 }
                 else
                 {
-                    log.LogInformation($"Skipping logging Custom Metrics per appSetting");
-                }
-                // If we will scale down, hold off unless we get a consistent message to do that
-                int idealNodes = (int)Math.Ceiling(idealNumberOfNodes);
-                if (idealNumberOfNodes < scaleSet.Capacity)
-                {
-                    scaleDownRequests.Add(idealNodes);
-                    if (scaleDownRequests.Count > 3)
+                    if (logCustomMetrics)
                     {
-                        log.LogInformation($"Scaling down due to repeated requests, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))}, avg = {scaleDownRequests.Average()}");
-                        idealNodes = (int)scaleDownRequests.Average();
-                        log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, false, deletedNodes, log);
-                        // wipe out the list
+                        log.LogInformation("Logging Custom Metrics");
+                        metricJSONGenerator.populateCustomMetric("RPS", rps.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                        metricJSONGenerator.populateCustomMetric("IdealNodeCount", idealNumberOfNodes.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                        metricJSONGenerator.populateCustomMetric("MaxConcurrentConnectionsPerNode", maxConcurrentConnectionsPerNode.ToString(), appGw.Name, scaleSet.RegionName, scaleSet.Id, log, clientID, clientSecret, tenantID, logCustomMetricsVerboseLogging);
+                    }
+                    else
+                    {
+                        log.LogInformation($"Skipping logging Custom Metrics per appSetting");
+                    }
+                    // If we will scale down, hold off unless we get a consistent message to do that
+                    int idealNodes = (int)Math.Ceiling(idealNumberOfNodes);
+
+                    idealNodes += healthBuffer;
+                    if (idealNodes < scaleSet.Capacity)
+                    {
+                        scaleDownRequests.Add(idealNodes);
+                        if (scaleDownRequests.Count > 3)
+                        {
+                            log.LogInformation($"Scaling down due to repeated requests, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))}, avg = {scaleDownRequests.Average()}");
+                            idealNodes = (int)scaleDownRequests.Average();
+                            log.LogInformation($"Scale down : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
+                            VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, false, deletedNodes, log);
+                            // wipe out the list
+                            scaleDownRequests.Clear();
+                        }
+                        else
+                        {
+                            log.LogInformation($"Scale down request received, total requests {scaleDownRequests.Count}, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))} not scaling yet");
+                        }
+                    }
+                    else
+                    {
                         scaleDownRequests.Clear();
-                    }
-                    else
-                    {
-                        log.LogInformation($"Scale down request received, total requests {scaleDownRequests.Count}, list = {string.Join(",", scaleDownRequests.Select(s => s.ToString()))} not scaling yet");
-                    }
-                }
-                else
-                {
-                    scaleDownRequests.Clear();
-                    if (scaleup)
-                    {
-                        log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
-                        VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, scaleUpQuickly, deletedNodes, log);
-                    }
-                    else
-                    {
-                        log.LogInformation("** Not performing scale up operations as scaleup == false");
+                        if (scaleup)
+                        {
+                            log.LogInformation($"Scale up : Attempting to change capacity from {scaleSet.Capacity} to {idealNodes}");
+                            VmScaleSetOperations.ScaleToTargetSize(scaleSet, idealNodes, maxScaleUpUnit, maxActiveServers, scaleUpQuickly, deletedNodes, log);
+                        }
+                        else
+                        {
+                            log.LogInformation("** Not performing scale up operations as scaleup == false");
+                        }
                     }
                 }
             }
