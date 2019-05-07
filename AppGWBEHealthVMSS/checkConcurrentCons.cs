@@ -56,21 +56,21 @@ namespace AppGWBEHealthVMSS
             string tenantID = Utils.GetEnvVariableOrDefault("tenantID", "a8175357-a762-478b-b724-6c2bd3f3f45e");
             string location = Utils.GetEnvVariableOrDefault("location");
             string subscriptionID = Utils.GetEnvVariableOrDefault("subscriptionID");
-            string resourcegroupname = Utils.GetEnvVariableOrDefault("_resourceGroupName");
-            string appGwName = Utils.GetEnvVariableOrDefault("_appGwName", "gobibearappGw");
+            string resourcegroupname = Utils.GetEnvVariableOrDefault("resourceGroupName");
+            string appGwName = Utils.GetEnvVariableOrDefault("appGwName", "gobibearappGw");
             string scaleSetName = Utils.GetEnvVariableOrDefault("_scaleSetName", "gobibear");
             int minHealthyServers = Utils.GetEnvVariableOrDefault("_minHealthyServers", 3);
-            int healthBuffer = Utils.GetEnvVariableOrDefault("_healthBuffer", 3);
+            int healthBuffer = Utils.GetEnvVariableOrDefault("healthBuffer", 3);
             int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
             int maxScaleUpUnit = Utils.GetEnvVariableOrDefault("_scaleByNodeCount", 10);
             int maxActiveServers = Utils.GetEnvVariableOrDefault("_maxActiveServers", 100);
-            bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("_fakeMode", "false"));
-            int cleanUpEvery = Utils.GetEnvVariableOrDefault("_cleanUpEvery", 4);
-            int scaleUpEvery = Utils.GetEnvVariableOrDefault("_scaleUpEvery", 1);
-            int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("_scheduleToRunFactor", 3); // how often we actually run when getting scheduled
-            bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("_scaleUpQuickly", "true"));
-            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetrics", "false"));
-            bool logCustomMetricsVerboseLogging = bool.Parse(Utils.GetEnvVariableOrDefault("_logCustomMetricsVerboseLogging", "false"));
+            bool fakeMode = bool.Parse(Utils.GetEnvVariableOrDefault("fakeMode", "false"));
+            int cleanUpEvery = Utils.GetEnvVariableOrDefault("cleanUpEvery", 4);
+            int scaleUpEvery = Utils.GetEnvVariableOrDefault("scaleUpEvery", 1);
+            int scheduleToRunFactor = Utils.GetEnvVariableOrDefault("scheduleToRunFactor", 3); // how often we actually run when getting scheduled
+            bool scaleUpQuickly = bool.Parse(Utils.GetEnvVariableOrDefault("scaleUpQuickly", "true"));
+            bool logCustomMetrics = bool.Parse(Utils.GetEnvVariableOrDefault("logCustomMetrics", "false"));
+            bool logCustomMetricsVerboseLogging = bool.Parse(Utils.GetEnvVariableOrDefault("logCustomMetricsVerboseLogging", "false"));
 
             // To get around CRON syntax limitations we can't actually run every 45 seconds
             // instead we get scheduled every 15 seconds and only actually run
