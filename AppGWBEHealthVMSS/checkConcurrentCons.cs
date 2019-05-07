@@ -74,7 +74,7 @@ namespace AppGWBEHealthVMSS
 
             // To get around CRON syntax limitations we can't actually run every 45 seconds
             // instead we get scheduled every 15 seconds and only actually run
-            // every 3 times.
+            // every {scheduleToRunFactor} times.
             if (scheduleCount++ % scheduleToRunFactor != 0)
             {
                 log.LogInformation("skipping due to scheduleToRunFactor");
@@ -110,18 +110,25 @@ namespace AppGWBEHealthVMSS
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
 
                 // Only run deletes every now and again
-                if (cleanup)
+                // If we have a problem during cleaning, eat the error as we want to continue scaling
+                try
                 {
-                    log.LogInformation($"Scaleset size BEFORE checking for bad nodes is {scaleSet.Capacity}");
-                    //// Remove any bad nodes first
-                    deletedNodes = ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
-                    log.LogInformation($"Scaleset size AFTER checking for bad nodes is {scaleSet.Capacity}");
+                    if (cleanup)
+                    {
+                        log.LogInformation($"Scaleset size BEFORE checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
+                        //// Remove any bad nodes first
+                        deletedNodes = ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
+                        log.LogInformation($"Scaleset size AFTER checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
+                    }
+                    else
+                    {
+                        log.LogInformation("Not running cleanup this pass since cleanup == false");
+                    }
                 }
-                else
+                catch (Exception cleaningError)
                 {
-                    log.LogInformation("Not running cleanup this pass since cleanup == false");
+                    log.LogError(cleaningError, "Error during cleaning - eat the error and continue scaling");
                 }
-
                 var healthyUnhealthyCounts = ApplicationGatewayOperations.GetHealthyAndUnhealthyNodeCounts(appGwBEHealth, log);
                 var healthyNodeCount = healthyUnhealthyCounts.Item1;
                 var unhealthyNodeCount = healthyUnhealthyCounts.Item2;
@@ -149,7 +156,7 @@ namespace AppGWBEHealthVMSS
                         deployingNodes += vmsByState[k].Count;
                     }
                 }
-                log.LogInformation($"Vm counts by state : {sb.ToString()}");
+                log.LogInformation($"VM counts by state : {sb.ToString()}");
                 // get the count of nodes which are deploying (will soon be online)
 
                 log.LogInformation("Considering {0} of these deploying", deployingNodes);
@@ -175,7 +182,7 @@ namespace AppGWBEHealthVMSS
                 // Sanity check that the number makes sense
                 if (idealNumberOfNodes > 160)
                 {
-                    log.LogInformation("Ideal Node Count looks incorrect, possibly due to bogus metrics ({IdealNodeCount}), IGNORING SCALE EVENT", idealNumberOfNodes);
+                    log.LogInformation("Ideal Node Count looks incorrect, possibly due to transient metrics ({IdealNodeCount}), ignoring scale event", idealNumberOfNodes);
                 }
                 else
                 {
@@ -188,7 +195,7 @@ namespace AppGWBEHealthVMSS
                     }
                     else
                     {
-                        log.LogInformation($"Skipping logging Custom Metrics per appSetting");
+                        log.LogInformation($"Skipping logging Custom Metrics per appSetting - not used in production");
                     }
                     // If we will scale down, hold off unless we get a consistent message to do that
                     int idealNodes = (int)Math.Ceiling(idealNumberOfNodes);
@@ -221,7 +228,7 @@ namespace AppGWBEHealthVMSS
                         }
                         else
                         {
-                            log.LogInformation("** Not performing scale up operations as scaleup == false");
+                            log.LogInformation("** Not performing scale up operations as scaleup == false (45 second CRON adjustment)");
                         }
                     }
                 }
