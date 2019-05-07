@@ -48,7 +48,7 @@ namespace AppGWBEHealthVMSS.shared
                 // only consider nodes which have been prtovisioned completely for removal
                 var virtualmachines = vms.Where(x => x.Inner.ProvisioningState == "Succeeded").ToList();
 
-                log.LogInformation($"{virtualmachines.Count} machines of {vms.Count} are completely provisioned, checking those for Gobibear Intentional Panic Instances nodes");
+                log.LogInformation($"{virtualmachines.Count} machines of {vms.Count} are completely provisioned, checking those for App Payload Failed nodes");
 
                 List<string> badInstances = new List<string>();
 
@@ -58,7 +58,7 @@ namespace AppGWBEHealthVMSS.shared
                     {
                         if (serverIPs.Contains(vm.ListNetworkInterfaces().First().Inner.IpConfigurations.First().PrivateIPAddress))
                         {
-                            log.LogInformation("Gobibear Intentional Panic Instance detected: {0}", vm.InstanceId);
+                            log.LogInformation("App Payload Failed detected: {0}", vm.InstanceId);
                             badInstances.Add(vm.InstanceId);
                         }
                     }
@@ -71,7 +71,7 @@ namespace AppGWBEHealthVMSS.shared
                 if (badInstances.Count() != 0)
                 {
                     var instancesToDelete = new List<string>();
-                    log.LogInformation("Removing Gobibear Intentional Panic Instances");
+                    log.LogInformation("Removing App Payload Failed");
                     foreach (var badVm in badInstances)
                     {
                         if (RecentPendingVMDeleteOperations.ContainsKey(badVm))

@@ -57,8 +57,8 @@ namespace AppGWBEHealthVMSS
             string location = Utils.GetEnvVariableOrDefault("location");
             string subscriptionID = Utils.GetEnvVariableOrDefault("subscriptionID");
             string resourcegroupname = Utils.GetEnvVariableOrDefault("resourceGroupName");
-            string appGwName = Utils.GetEnvVariableOrDefault("appGwName", "gobibearappGw");
-            string scaleSetName = Utils.GetEnvVariableOrDefault("_scaleSetName", "gobibear");
+            string appGwName = Utils.GetEnvVariableOrDefault("appGwName", "appGw");
+            string scaleSetName = Utils.GetEnvVariableOrDefault("_scaleSetName", "myScaleSet");
             int minHealthyServers = Utils.GetEnvVariableOrDefault("_minHealthyServers", 3);
             int healthBuffer = Utils.GetEnvVariableOrDefault("healthBuffer", 3);
             int maxConcurrentConnectionsPerNode = Utils.GetEnvVariableOrDefault("_maxConcurrentConnectionsPerNode", 3);
@@ -113,10 +113,10 @@ namespace AppGWBEHealthVMSS
                 
                 if (cleanup)
                 {
-                    log.LogInformation($"Scaleset size BEFORE checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
+                    log.LogInformation($"Scaleset size BEFORE checking for App Payload Failed nodes is {scaleSet.Capacity}");
                     //// Remove any bad nodes first
                     deletedNodes = ApplicationGatewayOperations.CheckApplicationGatewayBEHealthAndDeleteBadNodes(appGwBEHealth, scaleSet, minHealthyServers, log);
-                    log.LogInformation($"Scaleset size AFTER checking for Gobibear Intentional Panic Instance nodes is {scaleSet.Capacity}");
+                    log.LogInformation($"Scaleset size AFTER checking for App Payload Failed nodes is {scaleSet.Capacity}");
                 }
                 else
                 {
