@@ -105,7 +105,7 @@ namespace AppGWBEHealthVMSS
     ""data"": {
                 ""baseData"": {
                     ""metric"": ""{METRICNAME}"", 
-            ""namespace"": ""custommetric"", 
+            ""namespace"": ""Traffic"", 
             ""dimNames"": [   ""AppGwName"" 
             ], 
             ""series"": [
