@@ -108,7 +108,6 @@ namespace AppGWBEHealthVMSS
 
                 log.LogInformation($"Got AppGateway: {appGw.Id}");
                 var appGwBEHealth = azClient.ApplicationGateways.Inner.BackendHealthAsync(resourcegroupname, appGwName).Result;
-                // EXPERIMENT, removing nodes here rather than in other function
 
                 // Only run deletes every now and again
                 if (cleanup)
